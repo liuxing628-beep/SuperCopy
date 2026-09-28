@@ -1,0 +1,8 @@
+bin/
+obj/
+tests/bin/
+tests/obj/
+*.pdb
+.DS_Store
+dist/
+*.zip

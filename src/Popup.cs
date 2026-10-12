@@ -9,9 +9,11 @@ namespace SuperCopy
         private readonly TileCanvas tiles;
         private readonly Label title;
         private readonly Label footer;
-        private readonly string[] items;
+        private string[] items;
+        private bool escapeAvailable;
         private bool sized;
         internal event Action<string> Selected;
+        internal event Action<int> Removed;
         internal BlockPopup(string[] values, Point position)
         {
             items = values;
@@ -26,9 +28,10 @@ namespace SuperCopy
             ClientSize = new Size(580, 360);
             title = new Label { Dock = DockStyle.Top, Height = 42, Padding = new Padding(10, 10, 0, 0) };
             footer = new Label { Dock = DockStyle.Bottom, Height = 34, Padding = new Padding(10, 6, 0, 0),
-                ForeColor = Color.DimGray, Text = "Hover for full text · Click to paste · Scroll for more" };
+                ForeColor = Color.DimGray, Text = "Left-click: paste · Right-click: remove · Scroll for more" };
             tiles = new TileCanvas(values) { Dock = DockStyle.Fill, Font = Font };
             tiles.Chosen += Choose;
+            tiles.RemoveRequested += delegate(int index) { if (Removed != null) Removed(index); };
             Controls.Add(tiles);
             Controls.Add(title);
             Controls.Add(footer);
@@ -65,7 +68,14 @@ namespace SuperCopy
         }
         internal void SetEscapeAvailable(bool available)
         {
-            title.Text = "" + items.Length + " blocks · Click to paste · " + (available ? "Esc to close" : "Click outside to close");
+            escapeAvailable = available;
+            title.Text = items.Length + " blocks · " + (available ? "Esc to close" : "Click outside to close");
+        }
+        internal void UpdateItems(string[] values)
+        {
+            items = values;
+            tiles.UpdateValues(values);
+            SetEscapeAvailable(escapeAvailable);
         }
         private void Choose(int index)
         {
@@ -78,8 +88,8 @@ namespace SuperCopy
         // paint the visible rows. Mouse handling never focuses this window.
         private sealed class TileCanvas : Control
         {
-            private readonly string[] values;
-            private readonly string[] previews;
+            private string[] values;
+            private string[] previews;
             private readonly ToolTip tip = new ToolTip();
             private readonly PassiveScrollBar scroll = new PassiveScrollBar();
             private Size[] preferred;
@@ -88,7 +98,10 @@ namespace SuperCopy
             private int gap = 8, padding = 10, numberHeight = 18;
             private int hover = -1, pressed = -1;
             private bool updating;
+            private float currentScale = 1f;
+            private MouseButtons pressedButton;
             internal event Action<int> Chosen;
+            internal event Action<int> RemoveRequested;
             internal TileCanvas(string[] values)
             {
                 this.values = values;
@@ -103,11 +116,22 @@ namespace SuperCopy
                 scroll.ValueChanged += delegate { if (!updating) { SetHover(-1); pressed = -1; Invalidate(); } };
                 Controls.Add(scroll);
             }
+            internal void UpdateValues(string[] incoming)
+            {
+                // Hide stale tooltips before replacing arrays; retain the scroll position.
+                SetHover(-1); pressed = -1;
+                values = incoming;
+                previews = new string[incoming.Length];
+                for (int i = 0; i < incoming.Length; i++) previews[i] = incoming[i].Length > 600 ? incoming[i].Substring(0, 600) + "…" : incoming[i];
+                Prepare(ClientSize.Width, ClientSize.Width, currentScale);
+            }
             internal int Prepare(int minWidth, int maxWidth, float scale)
             {
+                currentScale = scale;
                 gap = Math.Max(4, (int)(8 * scale));
                 padding = Math.Max(5, (int)(10 * scale));
                 numberHeight = Math.Max(Font.Height, (int)(18 * scale));
+                if (numberFont != null) numberFont.Dispose();
                 numberFont = new Font(Font.FontFamily, Math.Max(7f, Font.Size - 1f));
                 preferred = new Size[values.Length];
                 int maxTile = Math.Max(1, Math.Min((int)(390 * scale), maxWidth - 2 * gap - scroll.Width));
@@ -200,14 +224,17 @@ namespace SuperCopy
             protected override void OnMouseDown(MouseEventArgs e)
             {
                 base.OnMouseDown(e);
-                pressed = e.Button == MouseButtons.Left ? Hit(e.Location) : -1;
+                pressedButton = e.Button;
+                pressed = e.Button == MouseButtons.Left || e.Button == MouseButtons.Right ? Hit(e.Location) : -1;
             }
             protected override void OnMouseUp(MouseEventArgs e)
             {
                 base.OnMouseUp(e);
                 int index = Hit(e.Location), down = pressed;
                 pressed = -1;
-                if (e.Button == MouseButtons.Left && index >= 0 && index == down && Chosen != null) Chosen(index);
+                if (index < 0 || index != down || e.Button != pressedButton) return;
+                if (e.Button == MouseButtons.Left && Chosen != null) Chosen(index);
+                else if (e.Button == MouseButtons.Right && RemoveRequested != null) RemoveRequested(index);
             }
             protected override void OnMouseWheel(MouseEventArgs e)
             {

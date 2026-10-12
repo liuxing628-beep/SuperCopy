@@ -1,4 +1,4 @@
-# SuperCopy 1.4 — Clipboard Blocks
+# SuperCopy 1.5 — Clipboard Blocks
 
 [Download the latest Windows ZIP](https://github.com/liuxing628-beep/SuperCopy/releases/latest) · [Source code](https://github.com/liuxing628-beep/SuperCopy)
 
@@ -7,13 +7,14 @@ Capture an Excel row or selected text, split it into reusable blocks, and click 
 ## Quick start
 
 1. Download the Windows ZIP from [Releases](https://github.com/liuxing628-beep/SuperCopy/releases/latest), extract it, and run **SuperCopy.exe**. Windows 10/11 with **.NET Framework 4.8** is required. No app installation is needed.
-2. On startup, press a middle, right, or side mouse button within 30 seconds to bind it. A side button is recommended. Press Esc to cancel, or choose **Rebind mouse button** to try again.
-3. In Excel or another app, select the content you want to capture. Press and release **Ctrl+Shift+C**. SuperCopy sends Ctrl+C to that app and reads the new text. Keep the same window active until capture finishes.
-4. Place the text cursor in your destination field, document, or Excel cell. Press your bound mouse button to open the panel. Hover to highlight a block, then left-click to paste it. The panel closes automatically and keeps the destination app's focus. Existing selected text is replaced according to that app's normal paste behavior.
-5. Open the panel again to reuse the same blocks. Only a successful **Ctrl+Shift+C** capture replaces them. Ordinary copying, clicking a block, or clipboard changes from another app do not replace the saved set.
-6. Double-click the system tray icon to open Settings. Closing Settings hides it; **Exit SuperCopy** fully exits the app and releases the mouse binding and shortcuts.
+2. **Step 1 — Super Copy shortcut:** click the capture field, press your preferred combination, then click **Use capture shortcut**. Use Ctrl or Alt with a letter, number, function key, or punctuation key; Shift is optional. For example, Ctrl+Shift+C is a choice, not a fixed binding.
+3. **Step 2 — Open panel shortcut:** record a different combination and click **Use panel shortcut**, or click **Or bind a mouse button** and press your preferred middle, right, or side button within 30 seconds. Setting a keyboard shortcut replaces the mouse binding, and vice versa. Both setup steps are required before background operation.
+4. In Excel or another app, select content and press and release **your Super Copy shortcut**. SuperCopy sends Ctrl+C to that app and reads new text. Keep the same window active until capture finishes. A dialog offers **Append to existing**, **Replace all**, or **Cancel**. Appending adds new blocks at the end; replacing refreshes the entire saved set; canceling keeps the saved set unchanged. The dialog appears even for the first capture.
+5. Place the text cursor in your destination field, document, or Excel cell. Use **your panel shortcut** to open the panel. Hover to highlight a block, then **left-click to paste** it. The panel closes automatically and keeps the destination app's focus. Existing selected text is replaced according to that app's normal paste behavior.
+6. **Right-click a block to remove it** from the saved set. The panel stays open and immediately rearranges the remaining blocks. Only the clicked occurrence is removed when there are duplicates. Removing the last block closes the empty panel. Deletion does not change the clipboard or send paste input.
+7. Open the panel again to reuse the saved set. Ordinary copying or clipboard changes from another app do not replace it. Double-click the system tray icon to open Settings and change shortcuts. Closing Settings hides it after setup; **Exit SuperCopy** fully exits the app and releases all bindings.
 
-**Ctrl+Alt+F8** is a backup shortcut for opening the panel. It does not replace Excel's Ctrl+Alt+V Paste Special shortcut.
+There are no automatically registered capture or panel shortcuts. Ctrl+C and Ctrl+V are reserved for native copy/paste, and the capture and panel shortcuts must differ. The app reports unavailable combinations so you can choose another. Shortcuts and mouse bindings apply only until exit.
 
 To update from an earlier release, exit the old copy from the system tray, extract the new package, and start the new executable. Bind your mouse button again.
 
@@ -24,7 +25,7 @@ To update from an earlier release, exit the old copy from the system tray, extra
 - The panel sizes itself to the amount of content and stays within the screen's working area. Larger sets scroll vertically.
 - Long text previews show up to three lines. Hover for a tooltip of up to 3,000 characters. Pasting always uses the full original block.
 - Scroll with the mouse wheel or the scrollbar. If Windows is configured not to scroll inactive windows on hover, use the scrollbar.
-- Press the bound mouse button again or click outside to close the panel. Esc also closes it when that shortcut is available.
+- Use your panel shortcut again or click outside to close the panel. Esc also closes it when that shortcut is available.
 - The panel does not take keyboard focus, so arrow keys and Enter remain available to your destination app.
 - The panel draws only visible rows rather than creating a separate window control for every block.
 
@@ -43,9 +44,9 @@ produces six blocks. `John Smith` and `New York Office` each remain a single blo
 
 Punctuation, URLs, numbers, duplicate values, and Unicode text are preserved. SuperCopy reads plain text; it does not preserve Excel formatting or decode Excel's quoted text conventions.
 
-Each capture supports up to 2,000,000 characters and 50,000 blocks. An empty, failed, or oversized capture leaves the previous set unchanged. Clipboard writes are retried briefly if another app has locked the clipboard.
+Each capture and the combined saved set support up to 2,000,000 characters and 50,000 blocks. Appending is checked against both combined limits before any change is made. An empty, failed, or oversized capture leaves the previous set unchanged. Clipboard writes are retried briefly if another app has locked the clipboard.
 
-Before pasting, SuperCopy waits for mouse buttons and modifier keys to be released. If the target window is closed, focus changes, or the clipboard changes unexpectedly, automatic pasting is canceled with a notification. The tray menu's **View saved blocks** is for viewing and copying only; open the panel from your destination app with the bound button or backup shortcut for automatic pasting.
+Before pasting, SuperCopy waits for mouse buttons and modifier keys to be released. If the target window is closed, focus changes, or the clipboard changes unexpectedly, automatic pasting is canceled with a notification. The tray menu's **View saved blocks** is for viewing and copying only; open the panel from your destination app with your configured keyboard shortcut or mouse button for automatic pasting.
 
 ## Mouse and Excel compatibility
 
@@ -54,8 +55,9 @@ Before pasting, SuperCopy waits for mouse buttons and modifier keys to be releas
 - Driver-only DPI or macro buttons may not produce standard mouse events. Map one to a middle or side button in the manufacturer's software before binding it. Wheel scrolling is not a bindable button.
 - Mouse monitoring runs on a dedicated thread so clipboard work on the UI thread does not block the mouse hook's message loop.
 - The panel avoids taking focus from Excel, including during in-cell editing.
-- If a side button does not open the panel, compare its behavior with **Ctrl+Alt+F8**. The Settings status area reports if the backup shortcut is already in use.
-- If **Ctrl+Shift+C** is in use by another app, resolve the conflict and restart SuperCopy.
+- If a side button does not open the panel, open Settings and configure a keyboard panel shortcut for comparison. No fixed backup shortcut is registered.
+- A mouse right-button binding opens/closes the panel outside its bounds. Inside the panel, right-clicking a block removes it instead of toggling the panel.
+- If a chosen shortcut is already in use, choose another combination. The app preserves the previous registration when it can restore it after an unsuccessful change.
 - If the target app runs as administrator, SuperCopy may need the same privilege level to send copy/paste input. SuperCopy does not request administrator privileges by default.
 - If notifications are disabled, double-click the tray icon to read the latest status. Apps that do not support Ctrl+C or do not place plain text on the clipboard cannot be captured this way.
 - The app uses system DPI scaling. Windows provides compatibility scaling between monitors with different scaling settings.
@@ -88,10 +90,19 @@ The SDK build downloads Microsoft's .NET Framework reference assemblies from NuG
 
 ## Validation
 
-The app is cross-compiled on macOS to a Windows PE executable. Automated checks cover text splitting, space preservation, Unicode, duplicate order, capture limits, preserving old blocks on failure, Win32 input structure layout, adaptive wrapping, narrow screens, hit testing, non-overlapping layouts, and 50,000-block sets.
+The app is cross-compiled on macOS to a Windows PE executable. Automated checks cover text splitting, space preservation, Unicode, duplicate order, capture limits, preserving old blocks on failure, Win32 input structure layout, adaptive wrapping, narrow screens, hit testing, non-overlapping layouts, 50,000-block sets, append/replace/cancel data behavior, exact removal of duplicates, combined append limits, and shortcut validation.
 
-The previous adaptive-layout version was reported to work well by its user. This English release has not been visually tested on Windows in the build environment. When trying a new setup, check mouse binding, Excel selection and in-cell editing, automatic pasting, scrolling and click targets, display scaling, and exiting/restoring normal mouse behavior.
+Previous releases were reported to work well by the user. This upgraded release has not been visually tested on Windows in the build environment. When trying a new setup, check mouse binding, Excel selection and in-cell editing, automatic pasting, scrolling and click targets, display scaling, and exiting/restoring normal mouse behavior.
 
 References:
 - [Microsoft: Low-level mouse hooks](https://learn.microsoft.com/en-us/windows/win32/winmsg/lowlevelmouseproc)
 - [Microsoft: SendInput and privilege restrictions](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-sendinput)
+
+## Changes in 1.5
+
+- Two-step startup setup for a custom capture shortcut followed by a custom keyboard or mouse panel shortcut.
+- A choice to append, replace, or cancel after every successful text capture.
+- Right-click deletion with immediate adaptive rearrangement and persistent removal from the saved set.
+- Left-click paste and space-preserving text splitting remain available.
+
+Windows acceptance checks: configure two different shortcuts; try an occupied shortcut; test both keyboard and side-button panel activation in Excel; append two captures; cancel a third; replace the set; remove one duplicate, a block after scrolling, and the final block; verify left-click paste; test right-click deletion when the right button is itself the panel binding.

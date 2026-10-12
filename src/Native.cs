@@ -49,11 +49,16 @@ namespace SuperCopy
             foreach (int key in keys) if ((GetAsyncKeyState(key) & 0x8000) != 0) return false;
             return true;
         }
+        internal static bool CaptureInputReleased(uint key)
+        {
+            return ModifiersReleased() && (GetAsyncKeyState((int)key) & 0x8000) == 0;
+        }
         internal static bool ModifiersReleased()
         {
             return (GetAsyncKeyState(0x11) & 0x8000) == 0 &&
                 (GetAsyncKeyState(0x10) & 0x8000) == 0 &&
-                (GetAsyncKeyState(0x43) & 0x8000) == 0 &&
+                (GetAsyncKeyState(0x5B) & 0x8000) == 0 &&
+                (GetAsyncKeyState(0x5C) & 0x8000) == 0 &&
                 (GetAsyncKeyState(0x12) & 0x8000) == 0;
         }
     }

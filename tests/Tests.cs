@@ -38,6 +38,39 @@ class Tests
         Expect(store.Items.Length == 1 && store.Items[0].Length == BlockStore.MaxCharacters, "Maximum text boundary");
         Expect(Marshal.SizeOf(typeof(Native.Input)) == (IntPtr.Size == 8 ? 40 : 28), "Win32 INPUT layout");
         Expect(Marshal.SizeOf(typeof(Native.MouseInfo)) == (IntPtr.Size == 8 ? 32 : 24), "Win32 MSLLHOOKSTRUCT layout");
+        store.Replace("A\tB\tA");
+        var parsed = BlockStore.Parse("New York\tC");
+        Expect(store.Items.SequenceEqual(new[] { "A", "B", "A" }), "Parsing new capture does not mutate saved blocks before user confirmation");
+        store.Commit(parsed, true);
+        Expect(store.Items.SequenceEqual(new[] { "A", "B", "A", "New York", "C" }), "Append preserves order, duplicates and spaces");
+        store.RemoveAt(2);
+        Expect(store.Items.SequenceEqual(new[] { "A", "B", "New York", "C" }), "Removing one duplicate preserves the other occurrence");
+        store.RemoveAt(0); store.RemoveAt(store.Items.Length - 1);
+        Expect(store.Items.SequenceEqual(new[] { "B", "New York" }), "Remove first and last block");
+        var beforeInvalidRemoval = store.Items;
+        try { store.RemoveAt(100); } catch (ArgumentOutOfRangeException) { }
+        Expect(Object.ReferenceEquals(store.Items, beforeInvalidRemoval), "Invalid removal preserves saved set");
+        store.Commit(new[] { "replacement" }, false);
+        Expect(store.Items.SequenceEqual(new[] { "replacement" }), "Replace discards old blocks");
+        store.RemoveAt(0);
+        Expect(store.Items.Length == 0, "Removing final block leaves empty set");
+        store.Commit(Enumerable.Repeat("x", BlockStore.MaxBlocks).ToArray(), false);
+        var full = store.Items;
+        bool tooMany = false;
+        try { store.Commit(new[] { "extra" }, true); } catch (ArgumentException) { tooMany = true; }
+        Expect(tooMany && Object.ReferenceEquals(full, store.Items), "Oversized append atomically preserves existing blocks");
+        store.Replace(new string('x', BlockStore.MaxCharacters));
+        full = store.Items; bool tooLong = false;
+        try { store.Commit(new[] { "extra" }, true); } catch (ArgumentException) { tooLong = true; }
+        Expect(tooLong && Object.ReferenceEquals(full, store.Items), "Append enforces combined character limit");
+        store.Commit(new[] { "small" }, false);
+        Expect(store.Items.SequenceEqual(new[] { "small" }), "Replace remains possible after rejected append");
+        string error;
+        Expect(Hotkey.IsValid(6, 0x43, out error) && Hotkey.IsValid(3, 0x77, out error), "Custom capture and panel combinations accepted");
+        Expect(!Hotkey.IsValid(2, 0x43, out error) && !Hotkey.IsValid(2, 0x56, out error), "Native copy/paste shortcuts cannot cause synthetic input recursion");
+        Expect(!Hotkey.IsValid(0, 0x43, out error) && !Hotkey.IsValid(4, 0x43, out error), "Ordinary typing and Shift-only combinations are not captured globally");
+        Expect(!Hotkey.IsValid(3, 0x11, out error) && !Hotkey.IsValid(1, 0x73, out error), "Modifier-only and Alt+F4 shortcuts rejected");
+        Expect(new Hotkey(6, 0x43).SameAs(new Hotkey(6, 0x43)) && !new Hotkey(6, 0x43).SameAs(new Hotkey(3, 0x77)), "Shortcut identity detects conflicting capture and panel assignments");
         var grid = TileLayout.Create(new[] { new Size(100, 40), new Size(100, 60), new Size(100, 40) }, 220, 8);
         Expect(grid.Bounds[0].Top == grid.Bounds[1].Top && grid.Bounds[2].Top >= grid.Bounds[0].Bottom + 8, "Multiple columns with automatic row wrapping");
         Expect(grid.Bounds[0].Height == 60 && grid.Bounds[1].Height == 60, "Row height accommodates long content");

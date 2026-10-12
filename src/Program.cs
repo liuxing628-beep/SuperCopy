@@ -37,7 +37,13 @@ namespace SuperCopy
         private readonly Native.MouseProc hookProc;
         private readonly System.Windows.Forms.Timer timer = new System.Windows.Forms.Timer();
         private MouseListener mouseListener;
-        private bool alternateRegistered, escapeRegistered, disposed;
+        private bool alternateRegistered, escapeRegistered, disposed, choosing, setupComplete;
+        private Hotkey captureHotkey, panelHotkey;
+        private readonly ShortcutBox captureBox = new ShortcutBox();
+        private readonly ShortcutBox panelBox = new ShortcutBox();
+        private readonly Button panelApply = new Button();
+        private sealed class PopupRegion { internal Rectangle Bounds; }
+        private volatile PopupRegion popupRegion;
         private IntPtr popupTarget;
         private volatile MouseButtons trigger = MouseButtons.None;
         private MouseButtons swallowed = MouseButtons.None;
@@ -56,30 +62,44 @@ namespace SuperCopy
 
         internal MainForm()
         {
-            Text = "SuperCopy 1.4 · Clipboard Blocks";
+            Text = "SuperCopy 1.5 · Clipboard Blocks";
             Font = new Font("Segoe UI", 10f);
             AutoScaleMode = AutoScaleMode.Dpi;
-            ClientSize = new Size(650, 415);
+            ClientSize = new Size(680, 520);
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
             StartPosition = FormStartPosition.CenterScreen;
-            var intro = new Label { Left = 24, Top = 20, Width = 602, Height = 112,
-                Text = "1. Press a middle, right, or side mouse button to bind it.\n2. Select text or Excel cells, then press and release Ctrl+Shift+C.\n3. Press your bound button, hover over a block, and click to paste.\n4. Open the panel again to reuse the same saved blocks." };
-            binding = new Label { Left = 24, Top = 137, Width = 602, Height = 52, ForeColor = Color.FromArgb(29, 78, 216) };
-            var note = new Label { Left = 24, Top = 195, Width = 602, Height = 68, ForeColor = Color.DimGray,
-                Text = "Split on tabs and line breaks; keep spaces. Backup shortcut: Ctrl+Alt+F8.\nA side button is recommended. Its usual action is replaced while running.\nPress Esc to cancel binding. Blocks and the binding are cleared on exit." };
-            learnButton = new Button { Left = 24, Top = 278, Width = 190, Height = 36, Text = "Rebind mouse button" };
-            var hide = new Button { Left = 226, Top = 278, Width = 190, Height = 36, Text = "Run in background" };
-            var quit = new Button { Left = 428, Top = 278, Width = 190, Height = 36, Text = "Exit SuperCopy" };
-            status = new Label { Left = 24, Top = 329, Width = 602, Height = 68, Text = "No blocks captured yet." };
-            Controls.AddRange(new Control[] { intro, binding, note, learnButton, hide, quit, status });
+            Controls.Add(new Label { Left = 24, Top = 18, Width = 632, Height = 36,
+                Text = "Set up your capture shortcut first, then choose how to open the panel." });
+            Controls.Add(new Label { Left = 24, Top = 60, Width = 632, Height = 26, Text = "Step 1 — Super Copy shortcut" });
+            captureBox.SetBounds(24, 92, 414, 30);
+            var captureApply = new Button { Left = 452, Top = 87, Width = 200, Height = 36, Text = "Use capture shortcut" };
+            Controls.Add(new Label { Left = 24, Top = 143, Width = 632, Height = 26, Text = "Step 2 — Open panel shortcut (keyboard or mouse)" });
+            panelBox.SetBounds(24, 175, 414, 30); panelBox.Enabled = false;
+            panelApply.SetBounds(452, 170, 200, 36); panelApply.Text = "Use panel shortcut"; panelApply.Enabled = false;
+            learnButton = new Button { Left = 24, Top = 217, Width = 246, Height = 36, Text = "Or bind a mouse button", Enabled = false };
+            binding = new Label { Left = 24, Top = 270, Width = 632, Height = 55, ForeColor = Color.FromArgb(29, 78, 216) };
+            var note = new Label { Left = 24, Top = 329, Width = 632, Height = 65, ForeColor = Color.DimGray,
+                Text = "Use Ctrl or Alt with a key (Shift is optional). Shortcuts apply until you exit.\nCapture asks whether to append or replace. Tabs and line breaks split blocks.\nLeft-click a block to paste; right-click it to remove it from the saved set." };
+            var hide = new Button { Left = 24, Top = 406, Width = 200, Height = 36, Text = "Run in background" };
+            var quit = new Button { Left = 242, Top = 406, Width = 200, Height = 36, Text = "Exit SuperCopy" };
+            status = new Label { Left = 24, Top = 455, Width = 632, Height = 54, Text = "Step 1: click the capture field and press your preferred shortcut." };
+            Controls.AddRange(new Control[] { captureBox, captureApply, panelBox, panelApply, binding, note, learnButton, hide, quit, status });
+            captureBox.ValidationMessage += delegate(string message) { status.Text = message; };
+            panelBox.ValidationMessage += delegate(string message) { status.Text = message; };
+            captureApply.Click += delegate { UseCaptureShortcut(); };
+            panelApply.Click += delegate { UsePanelShortcut(); };
             learnButton.Click += delegate { BeginLearning(); };
-            hide.Click += delegate { CancelLearning(); Hide(); };
+            hide.Click += delegate {
+                CancelLearning();
+                if (!setupComplete) { status.Text = "Complete both setup steps before running in background."; return; }
+                Hide();
+            };
             quit.Click += delegate { Exit(); };
             KeyPreview = true;
             KeyDown += delegate(object sender, KeyEventArgs e) { if (e.KeyCode == Keys.Escape) CancelLearning(); };
             var menu = new ContextMenuStrip();
-            menu.Items.Add("Settings / Rebind button", null, delegate { Show(); WindowState = FormWindowState.Normal; Activate(); });
+            menu.Items.Add("Settings / Change shortcuts", null, delegate { Show(); WindowState = FormWindowState.Normal; Activate(); });
             menu.Items.Add("View saved blocks", null, delegate { ShowBlocks(Cursor.Position, IntPtr.Zero); });
             menu.Items.Add("Exit", null, delegate { Exit(); });
             tray = new NotifyIcon { Icon = SystemIcons.Application, Text = "SuperCopy · No blocks captured", ContextMenuStrip = menu, Visible = true };
@@ -88,17 +108,59 @@ namespace SuperCopy
             timer.Interval = 40;
             timer.Tick += Tick;
             Load += delegate {
-                registered = Native.RegisterHotKey(Handle, 1, 0x4000 | 0x0002 | 0x0004, 0x43);
-                if (!registered) throw new InvalidOperationException("Ctrl+Shift+C is in use by another app. Free this shortcut and restart SuperCopy.");
-                alternateRegistered = Native.RegisterHotKey(Handle, 2, 0x4000 | 0x0002 | 0x0001, 0x77);
                 mouseListener = new MouseListener(hookProc);
-                if (!alternateRegistered) status.Text = "Ctrl+Alt+F8 is in use by another app. The bound mouse button is still available.";
                 timer.Start();
+                UpdateBinding();
             };
-            Shown += delegate { BeginLearning(); };
+            Shown += delegate { captureBox.Focus(); };
             FormClosing += delegate(object sender, FormClosingEventArgs e) {
-                if (!exiting && e.CloseReason == CloseReason.UserClosing) { e.Cancel = true; CancelLearning(); Hide(); }
+                if (!exiting && e.CloseReason == CloseReason.UserClosing) { e.Cancel = true; CancelLearning();
+                    if (setupComplete) Hide(); else status.Text = "Complete both setup steps, or click Exit SuperCopy."; }
             };
+        }
+        private bool InstallShortcut(int id, Hotkey candidate, Hotkey previous)
+        {
+            if (candidate == null) { status.Text = "Click the shortcut field and press a key combination first."; return false; }
+            Hotkey other = id == 1 ? panelHotkey : captureHotkey;
+            if (candidate.SameAs(other)) { status.Text = "Capture and panel shortcuts must be different."; return false; }
+            if (previous != null) Native.UnregisterHotKey(Handle, id);
+            if (Native.RegisterHotKey(Handle, id, 0x4000 | candidate.Modifiers, candidate.Key)) return true;
+            if (previous != null && !Native.RegisterHotKey(Handle, id, 0x4000 | previous.Modifiers, previous.Key)) {
+                if (id == 1) { captureHotkey = null; registered = false; setupComplete = false; }
+                else { panelHotkey = null; alternateRegistered = false; setupComplete = trigger != MouseButtons.None; }
+                UpdateBinding();
+            }
+            status.Text = "That shortcut is unavailable or already used by another app. Choose another combination.";
+            return false;
+        }
+        private void UseCaptureShortcut()
+        {
+            if (capturing || choosing || pendingWrite != null || pendingPaste) { status.Text = "Finish the current clipboard action first."; return; }
+            CancelLearning();
+            if (popup != null) popup.Close();
+            if (!InstallShortcut(1, captureBox.Candidate, captureHotkey)) return;
+            captureHotkey = captureBox.Candidate; registered = true;
+            panelBox.Enabled = panelApply.Enabled = learnButton.Enabled = true;
+            UpdateBinding();
+            status.Text = "Capture shortcut saved. Step 2: choose a keyboard shortcut or bind a mouse button.";
+            panelBox.Focus();
+        }
+        private void UsePanelShortcut()
+        {
+            if (captureHotkey == null) return;
+            if (capturing || choosing || pendingWrite != null || pendingPaste) { status.Text = "Finish the current clipboard action first."; return; }
+            CancelLearning();
+            if (popup != null) popup.Close();
+            if (!InstallShortcut(2, panelBox.Candidate, panelHotkey)) return;
+            panelHotkey = panelBox.Candidate; alternateRegistered = true;
+            trigger = MouseButtons.None; setupComplete = true;
+            UpdateBinding(); Hide();
+            Notify("Ready. Capture: " + ShortcutBox.DisplayName(captureHotkey) + "; open panel: " + ShortcutBox.DisplayName(panelHotkey) + ".");
+        }
+        private string PanelName() { return panelHotkey != null ? ShortcutBox.DisplayName(panelHotkey) : ButtonName(trigger); }
+        private void UpdateBinding()
+        {
+            binding.Text = "Super Copy: " + ShortcutBox.DisplayName(captureHotkey) + "\nOpen panel: " + PanelName();
         }
         private static string ButtonName(MouseButtons button)
         {
@@ -112,6 +174,7 @@ namespace SuperCopy
         }
         private void BeginLearning()
         {
+            if (captureHotkey == null || capturing || choosing || pendingWrite != null || pendingPaste) return;
             if (popup != null) popup.Close();
             learning = true;
             learnDeadline = DateTime.UtcNow.AddSeconds(30);
@@ -121,8 +184,8 @@ namespace SuperCopy
         private void CancelLearning()
         {
             learning = false;
-            learnButton.Enabled = true;
-            binding.Text = "Panel button: " + ButtonName(trigger);
+            learnButton.Enabled = captureHotkey != null;
+            UpdateBinding();
         }
         private void QueueUi(Action action)
         {
@@ -158,11 +221,18 @@ namespace SuperCopy
                 learning = false;
                 swallowed |= button;
                 QueueUi(delegate {
+                    if (alternateRegistered) Native.UnregisterHotKey(Handle, 2);
+                    alternateRegistered = false; panelHotkey = null; setupComplete = true;
                     CancelLearning(); Hide();
-                    Notify("Bound: " + ButtonName(trigger) + ". Select content and press Ctrl+Shift+C to capture it.");
+                    Notify("Ready. Capture: " + ShortcutBox.DisplayName(captureHotkey) + "; open panel: " + ButtonName(trigger) + ".");
                 });
                 return new IntPtr(1);
             }
+            // When right-button activation is selected, right-clicks inside the
+            // panel must reach the tile canvas for removal rather than toggle it.
+            PopupRegion region = popupRegion;
+            if (button == MouseButtons.Right && region != null && region.Bounds.Contains(eventPoint))
+                return Native.CallNextHookEx(IntPtr.Zero, code, message, data);
             if (down && button == trigger)
             {
                 swallowed |= button;
@@ -176,6 +246,15 @@ namespace SuperCopy
         }
         protected override void WndProc(ref Message m)
         {
+            if (m.Msg == 0x0312 && (m.WParam.ToInt32() == 1 || m.WParam.ToInt32() == 2) && Visible && ContainsFocus) {
+                var box = ActiveControl as ShortcutBox;
+                if (box != null) {
+                    box.Candidate = m.WParam.ToInt32() == 1 ? captureHotkey : panelHotkey;
+                    box.Text = ShortcutBox.DisplayName(box.Candidate);
+                }
+                status.Text = "Shortcut recorded. Click the corresponding Use shortcut button.";
+                return;
+            }
             if (m.Msg == 0x0312 && m.WParam.ToInt32() == 3) {
                 if (popup != null) popup.Close();
                 return;
@@ -186,7 +265,8 @@ namespace SuperCopy
             }
             if (m.Msg == 0x0312 && m.WParam.ToInt32() == 1)
             {
-                if (capturing || pendingWrite != null || pendingPaste) { Notify("The clipboard is busy. Please try again in a moment."); return; }
+                if (choosing || capturing || pendingWrite != null || pendingPaste) { Notify("The clipboard is busy. Please try again in a moment."); return; }
+                if (!setupComplete || captureHotkey == null) { Notify("Complete both shortcut setup steps first."); return; }
                 if (popup != null || Native.GetForegroundWindow() == Handle) { Notify("First select the content to copy in Excel or another app."); return; }
                 capturing = true; sent = false;
                 sourceWindow = Native.GetForegroundWindow();
@@ -204,7 +284,7 @@ namespace SuperCopy
                     Clipboard.SetText(pendingWrite, TextDataFormat.UnicodeText);
                     pendingWrite = null;
                     if (pasteTarget == IntPtr.Zero || !Native.IsWindow(pasteTarget)) {
-                        Notify("Copied. To paste automatically, place the caret in your target app and open the panel with your bound mouse button.");
+                        Notify("Copied. To paste automatically, place the caret in your target app and open the panel with your configured panel shortcut.");
                     } else {
                         pasteSequence = Native.GetClipboardSequenceNumber();
                         pendingPaste = true;
@@ -240,10 +320,10 @@ namespace SuperCopy
                 return;
             }
             if (!capturing) return;
-            if (Native.GetForegroundWindow() != sourceWindow) { FailCapture("The active window changed during capture. Return to your selection and press Ctrl+Shift+C again."); return; }
+            if (Native.GetForegroundWindow() != sourceWindow) { FailCapture("The active window changed during capture. Return to your selection and use your Super Copy shortcut again."); return; }
             if (DateTime.UtcNow >= captureDeadline) { FailCapture("No new text was copied. Check your selection and try again. Saved blocks are unchanged."); return; }
             if (!sent) {
-                if (!Native.ModifiersReleased()) return;
+                if (!Native.CaptureInputReleased(captureHotkey.Key)) return;
                 sequence = Native.GetClipboardSequenceNumber();
                 if (!Native.CopySelection()) { FailCapture("Could not send the copy shortcut. If the target app runs as administrator, run SuperCopy with the same privileges."); return; }
                 sent = true;
@@ -255,20 +335,34 @@ namespace SuperCopy
                 // Do not replace saved blocks unless a new, valid text copy has completed.
                 if (!Clipboard.ContainsText(TextDataFormat.UnicodeText)) return;
                 string text = Clipboard.GetText(TextDataFormat.UnicodeText);
-                store.Replace(text);
+                string[] incoming = BlockStore.Parse(text);
                 capturing = false;
-                tray.Text = "SuperCopy · " + store.Items.Length + " blocks";
-                Notify("Captured " + store.Items.Length + " blocks; open the panel with " + ButtonName(trigger) + ".");
+                choosing = true;
+                try {
+                    using (var choice = new CaptureChoice(incoming.Length, store.Items.Length)) {
+                        DialogResult result = choice.ShowDialog(this);
+                        if (result == DialogResult.Yes || result == DialogResult.No) {
+                            store.Commit(incoming, result == DialogResult.Yes);
+                            UpdateTray();
+                            Notify((result == DialogResult.Yes ? "Appended " : "Replaced with ") + incoming.Length +
+                                " blocks. Saved total: " + store.Items.Length + ". Open with " + PanelName() + ".");
+                        } else status.Text = "Capture canceled. Saved blocks are unchanged.";
+                    }
+                } finally {
+                    choosing = false;
+                    if (Native.IsWindow(sourceWindow)) Native.SetForegroundWindow(sourceWindow);
+                }
             } catch (ExternalException) { /* Clipboard lock is retried by the timer. */ }
               catch (ArgumentException ex) { FailCapture(ex.Message); }
         }
         private void FailCapture(string message) { capturing = false; Notify(message); }
         private void ShowBlocks(Point position, IntPtr target)
         {
-            if (learning) return;
+            if (learning || choosing) return;
+            if (!setupComplete) { Notify("Complete both shortcut setup steps first."); return; }
             if (capturing || pendingWrite != null || pendingPaste) { Notify("The clipboard is busy. Please open the panel again in a moment."); return; }
             if (popup != null) { popup.Close(); return; }
-            if (store.Items.Length == 0) { Notify("Select content in Excel or another app, then press Ctrl+Shift+C to capture blocks."); return; }
+            if (store.Items.Length == 0) { Notify("Select content in Excel or another app, then use " + ShortcutBox.DisplayName(captureHotkey) + " to capture blocks."); return; }
             var window = new BlockPopup(store.Items, position);
             popup = window;
             window.Selected += delegate(string text) {
@@ -278,18 +372,28 @@ namespace SuperCopy
                 pendingWrite = text;
                 writeDeadline = DateTime.UtcNow.AddSeconds(2);
             };
+            window.Removed += delegate(int index) {
+                store.RemoveAt(index);
+                UpdateTray();
+                status.Text = "Removed one block. " + store.Items.Length + " blocks remain.";
+                if (store.Items.Length == 0) window.Close(); else window.UpdateItems(store.Items);
+            };
+            window.LocationChanged += delegate { popupRegion = new PopupRegion { Bounds = window.Bounds }; };
+            window.SizeChanged += delegate { popupRegion = new PopupRegion { Bounds = window.Bounds }; };
             popupTarget = target;
             escapeRegistered = Native.RegisterHotKey(Handle, 3, 0x4000, 0x1B);
             window.SetEscapeAvailable(escapeRegistered);
             window.FormClosed += delegate {
                 if (popup == window) {
-                    popup = null;
+                    popup = null; popupRegion = null;
                     if (escapeRegistered) Native.UnregisterHotKey(Handle, 3);
                     escapeRegistered = false;
                 }
             };
             window.Show();
+            popupRegion = new PopupRegion { Bounds = window.Bounds };
         }
+        private void UpdateTray() { tray.Text = "SuperCopy · " + store.Items.Length + " blocks"; }
         private void Notify(string message)
         {
             status.Text = message;

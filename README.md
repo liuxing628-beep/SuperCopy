@@ -1,4 +1,4 @@
-# SuperCopy 1.5 — Clipboard Blocks
+# SuperCopy 1.6 — Clipboard Blocks
 
 [Download the latest Windows ZIP](https://github.com/liuxing628-beep/SuperCopy/releases/latest) · [Source code](https://github.com/liuxing628-beep/SuperCopy)
 
@@ -11,8 +11,9 @@ Capture an Excel row or selected text, split it into reusable blocks, and click 
 3. **Step 2 — Open panel shortcut:** record a different combination and click **Use panel shortcut**, or click **Or bind a mouse button** and press your preferred middle, right, or side button within 30 seconds. Setting a keyboard shortcut replaces the mouse binding, and vice versa. Both setup steps are required before background operation.
 4. In Excel or another app, select content and press and release **your Super Copy shortcut**. SuperCopy sends Ctrl+C to that app and reads new text. Keep the same window active until capture finishes. A dialog offers **Append to existing**, **Replace all**, or **Cancel**. Appending adds new blocks at the end; replacing refreshes the entire saved set; canceling keeps the saved set unchanged. The dialog appears even for the first capture.
 5. Place the text cursor in your destination field, document, or Excel cell. Use **your panel shortcut** to open the panel. Hover to highlight a block, then **left-click to paste** it. The panel closes automatically and keeps the destination app's focus. Existing selected text is replaced according to that app's normal paste behavior.
-6. **Right-click a block to remove it** from the saved set. The panel stays open and immediately rearranges the remaining blocks. Only the clicked occurrence is removed when there are duplicates. Removing the last block closes the empty panel. Deletion does not change the clipboard or send paste input.
-7. Open the panel again to reuse the saved set. Ordinary copying or clipboard changes from another app do not replace it. Double-click the system tray icon to open Settings and change shortcuts. Closing Settings hides it after setup; **Exit SuperCopy** fully exits the app and releases all bindings.
+6. **Hold the left mouse button and drag a block** to change its position in the reading order. A blue insertion line shows the destination. Release to apply the move; other blocks automatically reflow. Drag near the top or bottom to scroll. Releasing outside the panel cancels the move. A click with only small pointer movement still pastes. The custom order remains when the panel is reopened and when new blocks are appended.
+7. **Right-click a block to remove it** from the saved set. The panel stays open and immediately rearranges the remaining blocks. Only the clicked occurrence is removed when there are duplicates. Removing the last block closes the empty panel. Deletion does not change the clipboard or send paste input.
+8. Open the panel again to reuse the saved set. Ordinary copying or clipboard changes from another app do not replace it. Double-click the system tray icon to open Settings and change shortcuts. Closing Settings hides it after setup; **Exit SuperCopy** fully exits the app and releases all bindings.
 
 There are no automatically registered capture or panel shortcuts. Ctrl+C and Ctrl+V are reserved for native copy/paste, and the capture and panel shortcuts must differ. The app reports unavailable combinations so you can choose another. Shortcuts and mouse bindings apply only until exit.
 
@@ -21,7 +22,7 @@ To update from an earlier release, exit the old copy from the system tray, extra
 ## Adaptive block panel
 
 - Short blocks appear side by side. Longer blocks take more width, with automatic wrapping into additional rows.
-- Blocks retain their original order from left to right, then top to bottom. Each block displays its number.
+- Blocks initially follow the captured order from left to right, then top to bottom. Dragging updates this saved order and automatically reflows the panel; positions follow the layout rather than fixed screen coordinates. Each block displays its current number.
 - The panel sizes itself to the amount of content and stays within the screen's working area. Larger sets scroll vertically.
 - Long text previews show up to three lines. Hover for a tooltip of up to 3,000 characters. Pasting always uses the full original block.
 - Scroll with the mouse wheel or the scrollbar. If Windows is configured not to scroll inactive windows on hover, use the scrollbar.
@@ -90,7 +91,7 @@ The SDK build downloads Microsoft's .NET Framework reference assemblies from NuG
 
 ## Validation
 
-The app is cross-compiled on macOS to a Windows PE executable. Automated checks cover text splitting, space preservation, Unicode, duplicate order, capture limits, preserving old blocks on failure, Win32 input structure layout, adaptive wrapping, narrow screens, hit testing, non-overlapping layouts, 50,000-block sets, append/replace/cancel data behavior, exact removal of duplicates, combined append limits, and shortcut validation.
+The app is cross-compiled on macOS to a Windows PE executable. Automated checks cover text splitting, space preservation, Unicode, duplicate order, capture limits, preserving old blocks on failure, Win32 input structure layout, adaptive wrapping, narrow screens, hit testing, non-overlapping layouts, 50,000-block sets, append/replace/cancel data behavior, exact removal of duplicates, combined append limits, shortcut validation, drag/click separation, insertion targets, canceled drags, exact movement of duplicate occurrences, and reorder invariants.
 
 Previous releases were reported to work well by the user. This upgraded release has not been visually tested on Windows in the build environment. When trying a new setup, check mouse binding, Excel selection and in-cell editing, automatic pasting, scrolling and click targets, display scaling, and exiting/restoring normal mouse behavior.
 
@@ -106,3 +107,12 @@ References:
 - Left-click paste and space-preserving text splitting remain available.
 
 Windows acceptance checks: configure two different shortcuts; try an occupied shortcut; test both keyboard and side-button panel activation in Excel; append two captures; cancel a third; replace the set; remove one duplicate, a block after scrolling, and the final block; verify left-click paste; test right-click deletion when the right button is itself the panel binding.
+
+## Changes in 1.6
+
+- Hold and drag a block with the left mouse button to reorder it, with a floating preview and blue insertion line.
+- Drop applies the new saved order and automatically fills available row space. Reopening the panel retains the order; appended content goes after it.
+- Drag near the panel's top or bottom to scroll through longer sets. An outside drop or lost mouse capture cancels the move without pasting.
+- Ordinary left-click paste and right-click removal continue to work. Dragged blocks are never automatically pasted.
+
+Windows acceptance checks for dragging: click with small pointer jitter; move within a row and across rows; move first/last blocks and duplicate occurrences; drag back to the source; drop outside the panel; drag while scrolling at both edges; reopen the panel and append new blocks; test Excel cell editing and display scaling to confirm no focus change or unintended paste.

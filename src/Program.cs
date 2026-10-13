@@ -62,7 +62,7 @@ namespace SuperCopy
 
         internal MainForm()
         {
-            Text = "SuperCopy 1.5 · Clipboard Blocks";
+            Text = "SuperCopy 1.6 · Clipboard Blocks";
             Font = new Font("Segoe UI", 10f);
             AutoScaleMode = AutoScaleMode.Dpi;
             ClientSize = new Size(680, 520);
@@ -80,7 +80,7 @@ namespace SuperCopy
             learnButton = new Button { Left = 24, Top = 217, Width = 246, Height = 36, Text = "Or bind a mouse button", Enabled = false };
             binding = new Label { Left = 24, Top = 270, Width = 632, Height = 55, ForeColor = Color.FromArgb(29, 78, 216) };
             var note = new Label { Left = 24, Top = 329, Width = 632, Height = 65, ForeColor = Color.DimGray,
-                Text = "Use Ctrl or Alt with a key (Shift is optional). Shortcuts apply until you exit.\nCapture asks whether to append or replace. Tabs and line breaks split blocks.\nLeft-click a block to paste; right-click it to remove it from the saved set." };
+                Text = "Use Ctrl or Alt with a key (Shift is optional). Shortcuts apply until you exit.\nCapture asks whether to append or replace. Tabs and line breaks split blocks.\nClick to paste; hold and drag to reorder; right-click to remove a block." };
             var hide = new Button { Left = 24, Top = 406, Width = 200, Height = 36, Text = "Run in background" };
             var quit = new Button { Left = 242, Top = 406, Width = 200, Height = 36, Text = "Exit SuperCopy" };
             status = new Label { Left = 24, Top = 455, Width = 632, Height = 54, Text = "Step 1: click the capture field and press your preferred shortcut." };
@@ -377,6 +377,11 @@ namespace SuperCopy
                 UpdateTray();
                 status.Text = "Removed one block. " + store.Items.Length + " blocks remain.";
                 if (store.Items.Length == 0) window.Close(); else window.UpdateItems(store.Items);
+            };
+            window.Reordered += delegate(int source, int insertion) {
+                store.Move(source, insertion);
+                window.UpdateItems(store.Items);
+                status.Text = "Block order updated. The remaining blocks have been rearranged.";
             };
             window.LocationChanged += delegate { popupRegion = new PopupRegion { Bounds = window.Bounds }; };
             window.SizeChanged += delegate { popupRegion = new PopupRegion { Bounds = window.Bounds }; };

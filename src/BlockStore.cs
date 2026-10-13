@@ -41,6 +41,21 @@ namespace SuperCopy
             Array.Copy(incoming, 0, result, oldCount, incoming.Length);
             Items = result;
         }
+        // Insertion is a boundary in the original list: 0 is before the first
+        // item, Items.Length is after the last. Moving removes only this occurrence.
+        internal void Move(int source, int insertion)
+        {
+            if (source < 0 || source >= Items.Length) throw new ArgumentOutOfRangeException("source");
+            if (insertion < 0 || insertion > Items.Length) throw new ArgumentOutOfRangeException("insertion");
+            int destination = insertion > source ? insertion - 1 : insertion;
+            if (destination == source) return;
+            var result = (string[])Items.Clone();
+            string value = result[source];
+            if (destination < source) Array.Copy(result, destination, result, destination + 1, source - destination);
+            else Array.Copy(result, source + 1, result, source, destination - source);
+            result[destination] = value;
+            Items = result;
+        }
         internal void RemoveAt(int index)
         {
             if (index < 0 || index >= Items.Length) throw new ArgumentOutOfRangeException("index");

@@ -104,6 +104,50 @@ class Tests
         var large = TileLayout.Create(Enumerable.Repeat(new Size(110, 60), BlockStore.MaxBlocks).ToArray(), 800, 8);
         var last = large.Bounds[BlockStore.MaxBlocks - 1];
         Expect(large.HitTest(new Point(last.Left + 1, last.Top + 1)) == BlockStore.MaxBlocks - 1, "50,000-block layout remains selectable to the last row");
+        store.Replace("A\tB\tC\tD");
+        store.Move(0, 4);
+        Expect(store.Items.SequenceEqual(new[] { "B", "C", "D", "A" }), "Drag first block to end");
+        store.Move(3, 0);
+        Expect(store.Items.SequenceEqual(new[] { "A", "B", "C", "D" }), "Drag last block to beginning");
+        store.Move(1, 3);
+        Expect(store.Items.SequenceEqual(new[] { "A", "C", "B", "D" }), "Forward move uses original insertion boundaries");
+        var unchanged = store.Items;
+        store.Move(2, 2); store.Move(2, 3);
+        Expect(Object.ReferenceEquals(unchanged, store.Items), "Dropping before or after source is a no-op");
+        bool badMove = false;
+        try { store.Move(0, 5); } catch (ArgumentOutOfRangeException) { badMove = true; }
+        Expect(badMove && Object.ReferenceEquals(unchanged, store.Items), "Invalid drag cannot mutate saved blocks");
+        string duplicateOne = new string('a', 1), duplicateTwo = new string('a', 1);
+        store.Commit(new[] { duplicateOne, "B", duplicateTwo }, false);
+        store.Move(2, 0);
+        Expect(Object.ReferenceEquals(store.Items[0], duplicateTwo) && Object.ReferenceEquals(store.Items[1], duplicateOne), "Drag moves just the selected duplicate occurrence");
+        store.Commit(new[] { "appended" }, true);
+        Expect(store.Items.Last() == "appended" && Object.ReferenceEquals(store.Items[0], duplicateTwo), "Appending preserves custom block order");
+        bool orderValid = true;
+        store.Commit(Enumerable.Range(0, 30).Select(i => "item " + i).ToArray(), false);
+        for (int run = 0; run < 200; run++) {
+            var before = store.Items;
+            int from = random.Next(before.Length), slot = random.Next(before.Length + 1);
+            string moved = before[from];
+            var others = before.Where((value, index) => index != from).ToArray();
+            store.Move(from, slot);
+            int destination = Array.IndexOf(store.Items, moved);
+            orderValid &= store.Items.Length == before.Length && destination == (slot > from ? slot - 1 : slot);
+            orderValid &= store.Items.Where((value, index) => index != destination).SequenceEqual(others);
+        }
+        Expect(orderValid, "Repeated moves preserve all content and relative order of unaffected blocks");
+        Expect(grid.InsertionAt(new Point(-5, 20)) == 0 && grid.InsertionAt(new Point(500, 20)) == 2, "Drop at row edges resolves beginning or row end");
+        Expect(grid.InsertionAt(new Point(20, grid.Bounds[2].Top + 10)) == 2 && grid.InsertionAt(new Point(80, grid.Bounds[2].Top + 10)) == 3, "Drop target distinguishes left/right halves of a wrapped tile");
+        Expect(grid.InsertionAt(new Point(0, grid.Height + 10)) == 3 && empty.InsertionAt(Point.Empty) == 0, "Drop below all blocks resolves end, including empty layout");
+        var gesture = new DragGesture();
+        gesture.Begin(1, new Point(20, 20), new Size(8, 8)); gesture.Move(new Point(22, 22));
+        Expect(gesture.Complete(1, 1, true).Action == DragAction.Paste, "Small pointer jitter still pastes on click");
+        gesture.Begin(1, new Point(20, 20), new Size(8, 8)); gesture.Move(new Point(50, 20)); gesture.Move(new Point(20, 20));
+        Expect(gesture.Complete(1, 1, true).Action == DragAction.Move, "Dragging back to the source never pastes");
+        gesture.Begin(1, new Point(20, 20), new Size(8, 8)); gesture.Move(new Point(200, 200));
+        Expect(gesture.Complete(-1, -1, false).Action == DragAction.None, "Outside drop cancels without paste or move");
+        gesture.Begin(1, Point.Empty, new Size(8, 8)); gesture.Move(new Point(50, 50)); gesture.Cancel();
+        Expect(gesture.Complete(1, 1, true).Action == DragAction.None && !gesture.Active, "Lost mouse capture cancels a drag without paste");
         Console.WriteLine("PASS: " + checks + " checks");
     }
 }

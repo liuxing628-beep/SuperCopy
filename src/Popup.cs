@@ -14,6 +14,7 @@ namespace SuperCopy
         private bool sized;
         internal event Action<string> Selected;
         internal event Action<int> Removed;
+        internal event Action<int, int> Reordered;
         internal BlockPopup(string[] values, Point position)
         {
             items = values;
@@ -27,11 +28,12 @@ namespace SuperCopy
             Location = position;
             ClientSize = new Size(580, 360);
             title = new Label { Dock = DockStyle.Top, Height = 42, Padding = new Padding(10, 10, 0, 0) };
-            footer = new Label { Dock = DockStyle.Bottom, Height = 34, Padding = new Padding(10, 6, 0, 0),
-                ForeColor = Color.DimGray, Text = "Left-click: paste · Right-click: remove · Scroll for more" };
+            footer = new Label { Dock = DockStyle.Bottom, Height = 50, Padding = new Padding(10, 6, 0, 0),
+                ForeColor = Color.DimGray, Text = "Click: paste · Hold and drag: reorder\nRight-click: remove · Drag near top/bottom to scroll" };
             tiles = new TileCanvas(values) { Dock = DockStyle.Fill, Font = Font };
             tiles.Chosen += Choose;
             tiles.RemoveRequested += delegate(int index) { if (Removed != null) Removed(index); };
+            tiles.MoveRequested += delegate(int source, int insertion) { if (Reordered != null) Reordered(source, insertion); };
             Controls.Add(tiles);
             Controls.Add(title);
             Controls.Add(footer);
@@ -100,8 +102,13 @@ namespace SuperCopy
             private bool updating;
             private float currentScale = 1f;
             private MouseButtons pressedButton;
+            private readonly DragGesture drag = new DragGesture();
+            private readonly Timer dragScroll = new Timer();
+            private Point dragPoint;
+            private int insertion = -1;
             internal event Action<int> Chosen;
             internal event Action<int> RemoveRequested;
+            internal event Action<int, int> MoveRequested;
             internal TileCanvas(string[] values)
             {
                 this.values = values;
@@ -113,13 +120,22 @@ namespace SuperCopy
                 TabStop = false;
                 BackColor = Color.FromArgb(245, 247, 251);
                 scroll.Visible = false;
-                scroll.ValueChanged += delegate { if (!updating) { SetHover(-1); pressed = -1; Invalidate(); } };
+                scroll.ValueChanged += delegate {
+                    if (!updating) {
+                        SetHover(-1);
+                        if (drag.Dragging) UpdateDrag(PointToClient(Cursor.Position));
+                        else { pressed = -1; drag.Cancel(); }
+                        Invalidate();
+                    }
+                };
+                dragScroll.Interval = 65;
+                dragScroll.Tick += ScrollWhileDragging;
                 Controls.Add(scroll);
             }
             internal void UpdateValues(string[] incoming)
             {
                 // Hide stale tooltips before replacing arrays; retain the scroll position.
-                SetHover(-1); pressed = -1;
+                EndDrag(); SetHover(-1); pressed = -1;
                 values = incoming;
                 previews = new string[incoming.Length];
                 for (int i = 0; i < incoming.Length; i++) previews[i] = incoming[i].Length > 600 ? incoming[i].Substring(0, 600) + "…" : incoming[i];
@@ -192,7 +208,7 @@ namespace SuperCopy
                     Rectangle r = layout.Bounds[i];
                     if (r.Top > offset + ClientSize.Height) break;
                     r.Offset(gap, gap - offset);
-                    bool active = i == hover;
+                    bool active = i == hover || (drag.Dragging && i == drag.Source);
                     using (var background = new SolidBrush(active ? Color.FromArgb(219, 234, 254) : Color.White))
                         e.Graphics.FillRectangle(background, r);
                     using (var border = new Pen(active ? Color.FromArgb(59, 130, 246) : Color.FromArgb(218, 225, 235)))
@@ -206,6 +222,68 @@ namespace SuperCopy
                         active ? Color.FromArgb(29, 78, 216) : Color.FromArgb(30, 41, 59),
                         TextFormatFlags.WordBreak | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
                 }
+                if (drag.Dragging) DrawDrag(e.Graphics, offset);
+            }
+            private void DrawDrag(Graphics graphics, int offset)
+            {
+                if (insertion >= 0 && layout.Bounds.Length > 0) {
+                    Rectangle mark;
+                    if (insertion < layout.Bounds.Length) {
+                        mark = layout.Bounds[insertion]; mark.X -= gap / 2;
+                    } else {
+                        mark = layout.Bounds[layout.Bounds.Length - 1]; mark.X = mark.Right + gap / 2;
+                    }
+                    mark.Offset(gap, gap - offset);
+                    using (var pen = new Pen(Color.FromArgb(37, 99, 235), Math.Max(2, 3 * currentScale)))
+                        graphics.DrawLine(pen, mark.X, mark.Top, mark.X, mark.Bottom);
+                }
+                int width = Math.Min(240, Math.Max(1, ClientSize.Width - 2 * gap - scroll.Width));
+                Rectangle ghost = new Rectangle(Math.Max(gap, Math.Min(dragPoint.X + 14, ClientSize.Width - scroll.Width - width - gap)),
+                    Math.Max(0, Math.Min(dragPoint.Y + 16, ClientSize.Height - 50)), width, 50);
+                using (var fill = new SolidBrush(Color.FromArgb(235, 243, 255))) graphics.FillRectangle(fill, ghost);
+                using (var border = new Pen(Color.FromArgb(59, 130, 246))) graphics.DrawRectangle(border, ghost);
+                ghost.Inflate(-6, -6);
+                TextRenderer.DrawText(graphics, previews[drag.Source], Font, ghost, Color.FromArgb(29, 78, 216),
+                    TextFormatFlags.WordBreak | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+            }
+            private bool InsideDropArea(Point point)
+            {
+                return ClientRectangle.Contains(point) && point.X < ClientSize.Width - scroll.Width;
+            }
+            private void UpdateDrag(Point point)
+            {
+                dragPoint = point;
+                insertion = InsideDropArea(point) && layout != null ? layout.InsertionAt(
+                    new Point(point.X - gap, point.Y - gap + (scroll.Visible ? scroll.Value : 0))) : -1;
+                Invalidate();
+            }
+            private void ScrollWhileDragging(object sender, EventArgs e)
+            {
+                if (!drag.Dragging) return;
+                if ((Native.GetAsyncKeyState(0x01) & 0x8000) == 0) { EndDrag(); return; }
+                Point point = PointToClient(Cursor.Position);
+                if (!scroll.Visible || !InsideDropArea(point)) return;
+                int edge = Math.Max(20, (int)(30 * currentScale));
+                int step = Math.Max(1, Font.Height * 2);
+                int delta = point.Y < edge ? -step : point.Y >= ClientSize.Height - edge ? step : 0;
+                if (delta == 0) return;
+                int max = Math.Max(0, scroll.Maximum - scroll.LargeChange + 1);
+                scroll.Value = Math.Max(0, Math.Min(max, scroll.Value + delta));
+                UpdateDrag(point);
+            }
+            private void EndDrag()
+            {
+                dragScroll.Stop(); drag.Cancel(); insertion = -1;
+                Cursor = Cursors.Default;
+                if (Capture) Capture = false;
+                Invalidate();
+            }
+            protected override void OnMouseCaptureChanged(EventArgs e)
+            {
+                base.OnMouseCaptureChanged(e);
+                // WinForms releases capture during normal mouse-up as well. Only
+                // cancel here when capture was stolen while the button is still held.
+                if (!Capture && drag.Active && (Native.GetAsyncKeyState(0x01) & 0x8000) != 0) EndDrag();
             }
             private int Hit(Point p)
             {
@@ -219,22 +297,45 @@ namespace SuperCopy
                 tip.SetToolTip(this, index < 0 ? "" : values[index].Substring(0, Math.Min(3000, values[index].Length)));
                 Invalidate();
             }
-            protected override void OnMouseMove(MouseEventArgs e) { base.OnMouseMove(e); SetHover(Hit(e.Location)); }
+            protected override void OnMouseMove(MouseEventArgs e)
+            {
+                base.OnMouseMove(e);
+                if (drag.Active) {
+                    drag.Move(e.Location);
+                    if (drag.Dragging) {
+                        SetHover(-1); tip.Hide(this); Cursor = Cursors.SizeAll;
+                        dragScroll.Start(); UpdateDrag(e.Location); return;
+                    }
+                }
+                SetHover(Hit(e.Location));
+            }
             protected override void OnMouseLeave(EventArgs e) { base.OnMouseLeave(e); SetHover(-1); }
             protected override void OnMouseDown(MouseEventArgs e)
             {
                 base.OnMouseDown(e);
+                EndDrag();
                 pressedButton = e.Button;
                 pressed = e.Button == MouseButtons.Left || e.Button == MouseButtons.Right ? Hit(e.Location) : -1;
+                if (e.Button == MouseButtons.Left && pressed >= 0) {
+                    drag.Begin(pressed, e.Location, SystemInformation.DragSize);
+                    Capture = true;
+                }
             }
             protected override void OnMouseUp(MouseEventArgs e)
             {
                 base.OnMouseUp(e);
                 int index = Hit(e.Location), down = pressed;
                 pressed = -1;
-                if (index < 0 || index != down || e.Button != pressedButton) return;
-                if (e.Button == MouseButtons.Left && Chosen != null) Chosen(index);
-                else if (e.Button == MouseButtons.Right && RemoveRequested != null) RemoveRequested(index);
+                if (e.Button == MouseButtons.Left) {
+                    drag.Move(e.Location);
+                    int slot = InsideDropArea(e.Location) && layout != null ? layout.InsertionAt(
+                        new Point(e.X - gap, e.Y - gap + (scroll.Visible ? scroll.Value : 0))) : -1;
+                    DragResult result = drag.Complete(index, slot, slot >= 0);
+                    EndDrag();
+                    if (result.Action == DragAction.Move && MoveRequested != null) MoveRequested(result.Source, result.Insertion);
+                    else if (result.Action == DragAction.Paste && Chosen != null) Chosen(result.Source);
+                } else if (e.Button == MouseButtons.Right && index >= 0 && index == down && pressedButton == e.Button && RemoveRequested != null)
+                    RemoveRequested(index);
             }
             protected override void OnMouseWheel(MouseEventArgs e)
             {
@@ -245,7 +346,8 @@ namespace SuperCopy
                 int change = (int)((long)e.Delta * step / 120);
                 int max = Math.Max(0, scroll.Maximum - scroll.LargeChange + 1);
                 scroll.Value = Math.Max(0, Math.Min(max, scroll.Value - change));
-                SetHover(Hit(PointToClient(Cursor.Position)));
+                if (drag.Dragging) UpdateDrag(PointToClient(Cursor.Position));
+                else SetHover(Hit(PointToClient(Cursor.Position)));
             }
             protected override void WndProc(ref Message m)
             {
@@ -254,7 +356,7 @@ namespace SuperCopy
             }
             protected override void Dispose(bool disposing)
             {
-                if (disposing) { tip.Dispose(); if (numberFont != null) numberFont.Dispose(); }
+                if (disposing) { dragScroll.Stop(); dragScroll.Dispose(); drag.Cancel(); tip.Dispose(); if (numberFont != null) numberFont.Dispose(); }
                 base.Dispose(disposing);
             }
             private sealed class PassiveScrollBar : VScrollBar

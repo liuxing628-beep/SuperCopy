@@ -46,6 +46,22 @@ namespace SuperCopy
             }
             return lo;
         }
+        internal int InsertionAt(Point point)
+        {
+            if (Bounds.Length == 0) return 0;
+            int index = FirstVisible(point.Y);
+            if (index == Bounds.Length) return Bounds.Length;
+            if (point.Y < Bounds[index].Top && index > 0 &&
+                point.Y - Bounds[index - 1].Bottom < Bounds[index].Top - point.Y) index--;
+            int rowTop = Bounds[index].Top;
+            while (index > 0 && Bounds[index - 1].Top == rowTop) index--;
+            while (index < Bounds.Length && Bounds[index].Top == rowTop) {
+                Rectangle r = Bounds[index];
+                if (point.X < r.Left + r.Width / 2) return index;
+                index++;
+            }
+            return index;
+        }
         internal int HitTest(Point point)
         {
             for (int i = FirstVisible(point.Y); i < Bounds.Length && Bounds[i].Top <= point.Y; i++)

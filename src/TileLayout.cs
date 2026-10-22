@@ -62,6 +62,14 @@ namespace SuperCopy
             }
             return index;
         }
+        internal int MergeTargetAt(Point point, int source)
+        {
+            int index = HitTest(point);
+            if (index < 0 || index == source) return -1;
+            Rectangle center = Bounds[index];
+            center.Inflate(-System.Math.Max(1, center.Width / 5), -System.Math.Max(1, center.Height / 5));
+            return center.Contains(point) ? index : -1;
+        }
         internal int HitTest(Point point)
         {
             for (int i = FirstVisible(point.Y); i < Bounds.Length && Bounds[i].Top <= point.Y; i++)

@@ -175,6 +175,60 @@ class Tests
             placementsInside &= work.Contains(placed) && work.Contains(origin);
         }
         Expect(placementsInside, "Randomized multi-monitor layouts keep the full confirmation in the source work area");
+        store.Replace("A\tB\tC\tD");
+        store.Merge(3, 1);
+        Expect(store.Items.SequenceEqual(new[] { "A", "B\r\nD", "C" }), "Merge target then source at target position when source is later");
+        store.Merge(0, 2);
+        Expect(store.Items.SequenceEqual(new[] { "B\r\nD", "C\r\nA" }), "Merge preserves unaffected order when source is earlier");
+        store.Merge(1, 0);
+        Expect(store.Items.SequenceEqual(new[] { "B\r\nD\r\nC\r\nA" }), "Already merged blocks can be merged without losing internal line breaks");
+        store.Commit(new[] { "new" }, true);
+        Expect(store.Items.Length == 2 && store.Items[0] == "B\r\nD\r\nC\r\nA", "Appending does not re-split a merged block");
+        store.RemoveAt(0);
+        Expect(store.Items.SequenceEqual(new[] { "new" }), "Merged block can be removed as one item");
+        store.Replace("duplicate\tkeep\tduplicate"); store.Merge(2, 0);
+        Expect(store.Items.SequenceEqual(new[] { "duplicate\r\nduplicate", "keep" }), "Merge affects only the selected duplicate occurrences");
+        var beforeMerge = store.Items; store.Merge(0, 0);
+        Expect(Object.ReferenceEquals(store.Items, beforeMerge), "Self merge is a no-op");
+        bool badMerge = false;
+        try { store.Merge(0, 9); } catch (ArgumentOutOfRangeException) { badMerge = true; }
+        Expect(badMerge && Object.ReferenceEquals(store.Items, beforeMerge), "Invalid merge atomically preserves all blocks");
+        store.Commit(new[] { new string('x', BlockStore.MaxCharacters - 1), "y" }, false);
+        beforeMerge = store.Items; bool mergeTooLong = false;
+        try { store.Merge(1, 0); } catch (ArgumentException) { mergeTooLong = true; }
+        Expect(mergeTooLong && Object.ReferenceEquals(store.Items, beforeMerge), "Merge separator is included in combined character limit");
+        store.Commit(new[] { new string('x', BlockStore.MaxCharacters - 3), "y" }, false); store.Merge(1, 0);
+        Expect(store.Items.Length == 1 && store.Items[0].Length == BlockStore.MaxCharacters, "Merge exactly at character limit succeeds");
+        Expect(grid.MergeTargetAt(new Point(158, 30), 0) == 1, "Dropping in another tile's central area offers merge");
+        Expect(grid.MergeTargetAt(new Point(110, 1), 0) == -1 && grid.MergeTargetAt(new Point(104, 20), 0) == -1, "Edges and gaps remain sorting zones");
+        Expect(grid.MergeTargetAt(new Point(50, 30), 0) == -1, "Source tile cannot become its own merge target");
+        var mergeHover = new MergeHover();
+        mergeHover.Update(1, 1000); mergeHover.Update(1, 1449);
+        Expect(mergeHover.Target == -1 && mergeHover.Candidate == 1, "Brief overlap does not arm a merge");
+        mergeHover.Update(1, 1450);
+        Expect(mergeHover.Target == 1, "Continuous 450 ms hover arms merge");
+        mergeHover.Update(2, 1451);
+        Expect(mergeHover.Target == -1 && mergeHover.Candidate == 2, "Changing tiles requires a new dwell");
+        mergeHover.Update(2, 1901); mergeHover.Update(-1, 1902);
+        Expect(mergeHover.Target == -1 && mergeHover.Candidate == -1, "Leaving target center cancels a ready merge");
+        gesture.Begin(0, Point.Empty, new Size(8, 8)); gesture.Move(new Point(50, 50));
+        var mergeResult = gesture.Complete(1, 1, true, 1);
+        Expect(mergeResult.Action == DragAction.Merge && mergeResult.Source == 0 && mergeResult.Target == 1, "Ready center drop emits merge instead of paste or reorder");
+        gesture.Begin(0, Point.Empty, new Size(8, 8)); gesture.Move(new Point(50, 50));
+        Expect(gesture.Complete(1, 1, false, 1).Action == DragAction.None, "Outside or pending drop cannot merge or paste");
+        bool mergeContentsValid = true;
+        for (int run = 0; run < 30; run++) {
+            string[] original = Enumerable.Range(0, 12).Select(i => "item " + i).ToArray();
+            store.Commit(original, false);
+            while (store.Items.Length > 1) {
+                int count = store.Items.Length, source = random.Next(count), target = random.Next(count - 1);
+                if (target >= source) target++;
+                store.Merge(source, target);
+                mergeContentsValid &= store.Items.Length == count - 1;
+            }
+            mergeContentsValid &= store.Items[0].Split(new[] { "\r\n" }, StringSplitOptions.None).OrderBy(x => x).SequenceEqual(original.OrderBy(x => x));
+        }
+        Expect(mergeContentsValid, "Repeated arbitrary merges retain every original item exactly once");
         Console.WriteLine("PASS: " + checks + " checks");
     }
 }

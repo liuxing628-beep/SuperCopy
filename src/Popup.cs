@@ -1,5 +1,6 @@
 using System;
 using System.Drawing;
+using System.Diagnostics;
 using System.Windows.Forms;
 
 namespace SuperCopy
@@ -15,6 +16,7 @@ namespace SuperCopy
         internal event Action<string> Selected;
         internal event Action<int> Removed;
         internal event Action<int, int> Reordered;
+        internal event Action<int, int> Merged;
         internal BlockPopup(string[] values, Point position)
         {
             items = values;
@@ -28,12 +30,13 @@ namespace SuperCopy
             Location = position;
             ClientSize = new Size(580, 360);
             title = new Label { Dock = DockStyle.Top, Height = 42, Padding = new Padding(10, 10, 0, 0) };
-            footer = new Label { Dock = DockStyle.Bottom, Height = 50, Padding = new Padding(10, 6, 0, 0),
-                ForeColor = Color.DimGray, Text = "Click: paste · Hold and drag: reorder\nRight-click: remove · Drag near top/bottom to scroll" };
+            footer = new Label { Dock = DockStyle.Bottom, Height = 70, Padding = new Padding(10, 6, 0, 0),
+                ForeColor = Color.DimGray, Text = "Click: paste · Right-click: remove\nEdges: reorder · Center + hold: merge\nDrag near top/bottom to scroll" };
             tiles = new TileCanvas(values) { Dock = DockStyle.Fill, Font = Font };
             tiles.Chosen += Choose;
             tiles.RemoveRequested += delegate(int index) { if (Removed != null) Removed(index); };
             tiles.MoveRequested += delegate(int source, int insertion) { if (Reordered != null) Reordered(source, insertion); };
+            tiles.MergeRequested += delegate(int source, int target) { if (Merged != null) Merged(source, target); };
             Controls.Add(tiles);
             Controls.Add(title);
             Controls.Add(footer);
@@ -103,12 +106,15 @@ namespace SuperCopy
             private float currentScale = 1f;
             private MouseButtons pressedButton;
             private readonly DragGesture drag = new DragGesture();
+            private readonly MergeHover merge = new MergeHover();
+            private readonly Stopwatch dragClock = Stopwatch.StartNew();
             private readonly Timer dragScroll = new Timer();
             private Point dragPoint;
             private int insertion = -1;
             internal event Action<int> Chosen;
             internal event Action<int> RemoveRequested;
             internal event Action<int, int> MoveRequested;
+            internal event Action<int, int> MergeRequested;
             internal TileCanvas(string[] values)
             {
                 this.values = values;
@@ -209,12 +215,19 @@ namespace SuperCopy
                     if (r.Top > offset + ClientSize.Height) break;
                     r.Offset(gap, gap - offset);
                     bool active = i == hover || (drag.Dragging && i == drag.Source);
-                    using (var background = new SolidBrush(active ? Color.FromArgb(219, 234, 254) : Color.White))
+                    bool pendingMerge = drag.Dragging && i == merge.Candidate;
+                    bool readyMerge = pendingMerge && i == merge.Target;
+                    Color tileFill = pendingMerge ? (readyMerge ? Color.FromArgb(209, 250, 229) : Color.FromArgb(255, 247, 219)) :
+                        active ? Color.FromArgb(219, 234, 254) : Color.White;
+                    Color tileBorder = pendingMerge ? (readyMerge ? Color.FromArgb(5, 150, 105) : Color.FromArgb(217, 146, 30)) :
+                        active ? Color.FromArgb(59, 130, 246) : Color.FromArgb(218, 225, 235);
+                    using (var background = new SolidBrush(tileFill))
                         e.Graphics.FillRectangle(background, r);
-                    using (var border = new Pen(active ? Color.FromArgb(59, 130, 246) : Color.FromArgb(218, 225, 235)))
+                    using (var border = new Pen(tileBorder, pendingMerge ? 2 : 1))
                         e.Graphics.DrawRectangle(border, r.X, r.Y, r.Width - 1, r.Height - 1);
                     Rectangle number = new Rectangle(r.X + padding, r.Y + padding / 2, Math.Max(1, r.Width - 2 * padding), numberHeight);
-                    TextRenderer.DrawText(e.Graphics, (i + 1).ToString(), numberFont, number, Color.SlateGray,
+                    TextRenderer.DrawText(e.Graphics, pendingMerge ? (readyMerge ? "Merge" : "Hold...") : (i + 1).ToString(), numberFont, number,
+                        pendingMerge ? tileBorder : Color.SlateGray,
                         TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis);
                     Rectangle body = new Rectangle(r.X + padding, r.Y + numberHeight + padding,
                         Math.Max(1, r.Width - 2 * padding), Math.Max(1, r.Height - numberHeight - 2 * padding));
@@ -243,7 +256,8 @@ namespace SuperCopy
                 using (var fill = new SolidBrush(Color.FromArgb(235, 243, 255))) graphics.FillRectangle(fill, ghost);
                 using (var border = new Pen(Color.FromArgb(59, 130, 246))) graphics.DrawRectangle(border, ghost);
                 ghost.Inflate(-6, -6);
-                TextRenderer.DrawText(graphics, previews[drag.Source], Font, ghost, Color.FromArgb(29, 78, 216),
+                string dragText = merge.Candidate >= 0 ? (merge.Target >= 0 ? "Release to merge" : "Hold to merge") : previews[drag.Source];
+                TextRenderer.DrawText(graphics, dragText, Font, ghost, merge.Target >= 0 ? Color.FromArgb(5, 120, 85) : Color.FromArgb(29, 78, 216),
                     TextFormatFlags.WordBreak | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
             }
             private bool InsideDropArea(Point point)
@@ -253,8 +267,14 @@ namespace SuperCopy
             private void UpdateDrag(Point point)
             {
                 dragPoint = point;
-                insertion = InsideDropArea(point) && layout != null ? layout.InsertionAt(
-                    new Point(point.X - gap, point.Y - gap + (scroll.Visible ? scroll.Value : 0))) : -1;
+                int candidate = -1;
+                if (InsideDropArea(point) && layout != null) {
+                    Point documentPoint = new Point(point.X - gap, point.Y - gap + (scroll.Visible ? scroll.Value : 0));
+                    candidate = layout.MergeTargetAt(documentPoint, drag.Source);
+                    insertion = layout.InsertionAt(documentPoint);
+                } else insertion = -1;
+                merge.Update(candidate, dragClock.ElapsedMilliseconds);
+                if (merge.Candidate >= 0) insertion = -1;
                 Invalidate();
             }
             private void ScrollWhileDragging(object sender, EventArgs e)
@@ -262,6 +282,7 @@ namespace SuperCopy
                 if (!drag.Dragging) return;
                 if ((Native.GetAsyncKeyState(0x01) & 0x8000) == 0) { EndDrag(); return; }
                 Point point = PointToClient(Cursor.Position);
+                UpdateDrag(point); // also advances the merge dwell when the pointer is stationary
                 if (!scroll.Visible || !InsideDropArea(point)) return;
                 int edge = Math.Max(20, (int)(30 * currentScale));
                 int step = Math.Max(1, Font.Height * 2);
@@ -273,7 +294,7 @@ namespace SuperCopy
             }
             private void EndDrag()
             {
-                dragScroll.Stop(); drag.Cancel(); insertion = -1;
+                dragScroll.Stop(); drag.Cancel(); merge.Reset(); insertion = -1;
                 Cursor = Cursors.Default;
                 if (Capture) Capture = false;
                 Invalidate();
@@ -330,9 +351,13 @@ namespace SuperCopy
                     drag.Move(e.Location);
                     int slot = InsideDropArea(e.Location) && layout != null ? layout.InsertionAt(
                         new Point(e.X - gap, e.Y - gap + (scroll.Visible ? scroll.Value : 0))) : -1;
-                    DragResult result = drag.Complete(index, slot, slot >= 0);
+                    if (drag.Dragging) UpdateDrag(e.Location);
+                    int mergeTarget = merge.Target;
+                    bool waitingToMerge = merge.Candidate >= 0 && mergeTarget < 0;
+                    DragResult result = drag.Complete(index, slot, slot >= 0 && !waitingToMerge, mergeTarget);
                     EndDrag();
-                    if (result.Action == DragAction.Move && MoveRequested != null) MoveRequested(result.Source, result.Insertion);
+                    if (result.Action == DragAction.Merge && MergeRequested != null) MergeRequested(result.Source, result.Target);
+                    else if (result.Action == DragAction.Move && MoveRequested != null) MoveRequested(result.Source, result.Insertion);
                     else if (result.Action == DragAction.Paste && Chosen != null) Chosen(result.Source);
                 } else if (e.Button == MouseButtons.Right && index >= 0 && index == down && pressedButton == e.Button && RemoveRequested != null)
                     RemoveRequested(index);

@@ -56,6 +56,22 @@ namespace SuperCopy
             result[destination] = value;
             Items = result;
         }
+        internal void Merge(int source, int target)
+        {
+            if (source < 0 || source >= Items.Length) throw new ArgumentOutOfRangeException("source");
+            if (target < 0 || target >= Items.Length) throw new ArgumentOutOfRangeException("target");
+            if (source == target) return;
+            long characters = 2; // CRLF between target text and dragged text.
+            foreach (string item in Items) characters += item.Length;
+            if (characters > MaxCharacters) throw new ArgumentException("Merging would exceed 2,000,000 characters. Saved blocks are unchanged.");
+            string combined = Items[target] + "\r\n" + Items[source];
+            var result = new string[Items.Length - 1];
+            for (int from = 0, to = 0; from < Items.Length; from++) {
+                if (from == source) continue;
+                result[to++] = from == target ? combined : Items[from];
+            }
+            Items = result;
+        }
         internal void RemoveAt(int index)
         {
             if (index < 0 || index >= Items.Length) throw new ArgumentOutOfRangeException("index");

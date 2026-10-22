@@ -1,4 +1,4 @@
-# SuperCopy 1.6 — Clipboard Blocks
+# SuperCopy 1.6.1 — Clipboard Blocks
 
 [Download the latest Windows ZIP](https://github.com/liuxing628-beep/SuperCopy/releases/latest) · [Source code](https://github.com/liuxing628-beep/SuperCopy)
 
@@ -9,7 +9,7 @@ Capture an Excel row or selected text, split it into reusable blocks, and click 
 1. Download the Windows ZIP from [Releases](https://github.com/liuxing628-beep/SuperCopy/releases/latest), extract it, and run **SuperCopy.exe**. Windows 10/11 with **.NET Framework 4.8** is required. No app installation is needed.
 2. **Step 1 — Super Copy shortcut:** click the capture field, press your preferred combination, then click **Use capture shortcut**. Use Ctrl or Alt with a letter, number, function key, or punctuation key; Shift is optional. For example, Ctrl+Shift+C is a choice, not a fixed binding.
 3. **Step 2 — Open panel shortcut:** record a different combination and click **Use panel shortcut**, or click **Or bind a mouse button** and press your preferred middle, right, or side button within 30 seconds. Setting a keyboard shortcut replaces the mouse binding, and vice versa. Both setup steps are required before background operation.
-4. In Excel or another app, select content and press and release **your Super Copy shortcut**. SuperCopy sends Ctrl+C to that app and reads new text. Keep the same window active until capture finishes. A dialog offers **Append to existing**, **Replace all**, or **Cancel**. Appending adds new blocks at the end; replacing refreshes the entire saved set; canceling keeps the saved set unchanged. The dialog appears even for the first capture.
+4. In Excel or another app, select content and press and release **your Super Copy shortcut**. SuperCopy sends Ctrl+C to that app and reads new text. Keep the same window active until capture finishes. The choice dialog opens near the mouse on the source application's screen. If the mouse is on another monitor, it opens around the center of the source screen instead. Its location is saved when you trigger capture, so moving the mouse during copying does not move the dialog to another display. It avoids screen edges and the taskbar. A dialog offers **Append to existing**, **Replace all**, or **Cancel**. Appending adds new blocks at the end; replacing refreshes the entire saved set; canceling keeps the saved set unchanged. The dialog appears even for the first capture.
 5. Place the text cursor in your destination field, document, or Excel cell. Use **your panel shortcut** to open the panel. Hover to highlight a block, then **left-click to paste** it. The panel closes automatically and keeps the destination app's focus. Existing selected text is replaced according to that app's normal paste behavior.
 6. **Hold the left mouse button and drag a block** to change its position in the reading order. A blue insertion line shows the destination. Release to apply the move; other blocks automatically reflow. Drag near the top or bottom to scroll. Releasing outside the panel cancels the move. A click with only small pointer movement still pastes. The custom order remains when the panel is reopened and when new blocks are appended.
 7. **Right-click a block to remove it** from the saved set. The panel stays open and immediately rearranges the remaining blocks. Only the clicked occurrence is removed when there are duplicates. Removing the last block closes the empty panel. Deletion does not change the clipboard or send paste input.
@@ -116,3 +116,9 @@ Windows acceptance checks: configure two different shortcuts; try an occupied sh
 - Ordinary left-click paste and right-click removal continue to work. Dragged blocks are never automatically pasted.
 
 Windows acceptance checks for dragging: click with small pointer jitter; move within a row and across rows; move first/last blocks and duplicate occurrences; drag back to the source; drop outside the panel; drag while scrolling at both edges; reopen the panel and append new blocks; test Excel cell editing and display scaling to confirm no focus change or unintended paste.
+
+## Fix in 1.6.1
+
+The Append / Replace all dialog now opens beside the pointer on the capture source screen instead of centering on the main/settings screen. Keyboard capture with the pointer on another monitor stays on the source application screen. Placement is calculated after font/DPI scaling, clamped to the current working area, and supports monitors to the left or above the primary display. On unusually small work areas, the dialog uses scrolling to keep its controls accessible.
+
+Windows acceptance checks: capture from Excel/mail on each monitor; capture near all four screen edges; select by keyboard while leaving the mouse on the other monitor; compare mixed scaling settings; confirm Append, Replace all, Cancel, and restoring focus to the source app.

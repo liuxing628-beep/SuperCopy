@@ -148,6 +148,33 @@ class Tests
         Expect(gesture.Complete(-1, -1, false).Action == DragAction.None, "Outside drop cancels without paste or move");
         gesture.Begin(1, Point.Empty, new Size(8, 8)); gesture.Move(new Point(50, 50)); gesture.Cancel();
         Expect(gesture.Complete(1, 1, true).Action == DragAction.None && !gesture.Active, "Lost mouse capture cancels a drag without paste");
+        var extended = new Rectangle(1920, 0, 2560, 1400);
+        var pointer = new Point(2400, 300);
+        Expect(WindowPlacement.CaptureAnchor(extended, pointer) == pointer, "Use the pointer when it is on the source monitor");
+        var anchor = WindowPlacement.CaptureAnchor(extended, new Point(300, 300));
+        Expect(extended.Contains(anchor), "Keyboard capture stays on the source monitor when mouse is elsewhere");
+        var confirmation = WindowPlacement.NearAnchor(pointer, new Size(590, 220), extended, 16);
+        Expect(confirmation.Location == new Point(2416, 316) && extended.Contains(confirmation), "Confirmation appears beside the pointer on the extended monitor");
+        confirmation = WindowPlacement.NearAnchor(new Point(4475, 1395), new Size(590, 220), extended, 16);
+        Expect(extended.Contains(confirmation) && confirmation.Right < 4475 && confirmation.Bottom < 1395, "Near bottom-right corner, open to the left and above without covering the taskbar");
+        var leftDisplay = new Rectangle(-1920, -180, 1920, 1040);
+        confirmation = WindowPlacement.NearAnchor(new Point(-1800, -150), new Size(590, 220), leftDisplay, 16);
+        Expect(leftDisplay.Contains(confirmation) && confirmation.X < 0 && confirmation.Y < 0, "Support negative monitor coordinates without jumping to the primary screen");
+        var upperDisplay = new Rectangle(0, -1200, 1920, 1160);
+        confirmation = WindowPlacement.NearAnchor(new Point(1900, -60), new Size(900, 350), upperDisplay, 16);
+        Expect(upperDisplay.Contains(confirmation), "Support a monitor above the primary screen with a bottom taskbar");
+        var tinyDisplay = new Rectangle(0, 0, 400, 200);
+        confirmation = WindowPlacement.NearAnchor(new Point(390, 190), new Size(900, 350), tinyDisplay, 16);
+        Expect(tinyDisplay.Contains(confirmation) && confirmation.Size == tinyDisplay.Size, "Fit oversized scaled confirmation to the work area");
+        bool placementsInside = true;
+        for (int run = 0; run < 300; run++) {
+            var work = new Rectangle(random.Next(-4000, 3000), random.Next(-2000, 2000), random.Next(400, 3000), random.Next(250, 1800));
+            var mouse = new Point(random.Next(-4000, 6000), random.Next(-2000, 4000));
+            var origin = WindowPlacement.CaptureAnchor(work, mouse);
+            var placed = WindowPlacement.NearAnchor(origin, new Size(random.Next(300, 1200), random.Next(150, 500)), work, 16);
+            placementsInside &= work.Contains(placed) && work.Contains(origin);
+        }
+        Expect(placementsInside, "Randomized multi-monitor layouts keep the full confirmation in the source work area");
         Console.WriteLine("PASS: " + checks + " checks");
     }
 }

@@ -51,6 +51,7 @@ namespace SuperCopy
         private bool registered, sent;
         private DateTime learnDeadline, captureDeadline, writeDeadline;
         private IntPtr sourceWindow;
+        private Point captureAnchor;
         private uint sequence;
         private bool capturing;
         private string pendingWrite;
@@ -62,7 +63,7 @@ namespace SuperCopy
 
         internal MainForm()
         {
-            Text = "SuperCopy 1.6 · Clipboard Blocks";
+            Text = "SuperCopy 1.6.1 · Clipboard Blocks";
             Font = new Font("Segoe UI", 10f);
             AutoScaleMode = AutoScaleMode.Dpi;
             ClientSize = new Size(680, 520);
@@ -270,6 +271,7 @@ namespace SuperCopy
                 if (popup != null || Native.GetForegroundWindow() == Handle) { Notify("First select the content to copy in Excel or another app."); return; }
                 capturing = true; sent = false;
                 sourceWindow = Native.GetForegroundWindow();
+                captureAnchor = WindowPlacement.CaptureAnchor(Screen.FromHandle(sourceWindow).WorkingArea, Cursor.Position);
                 captureDeadline = DateTime.UtcNow.AddSeconds(5);
                 return;
             }
@@ -339,7 +341,7 @@ namespace SuperCopy
                 capturing = false;
                 choosing = true;
                 try {
-                    using (var choice = new CaptureChoice(incoming.Length, store.Items.Length)) {
+                    using (var choice = new CaptureChoice(incoming.Length, store.Items.Length, captureAnchor)) {
                         DialogResult result = choice.ShowDialog(this);
                         if (result == DialogResult.Yes || result == DialogResult.No) {
                             store.Commit(incoming, result == DialogResult.Yes);

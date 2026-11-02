@@ -42,11 +42,11 @@ class Tests
         var parsed = BlockStore.Parse("New York\tC");
         Expect(store.Items.SequenceEqual(new[] { "A", "B", "A" }), "Parsing new capture does not mutate saved blocks before user confirmation");
         store.Commit(parsed, true);
-        Expect(store.Items.SequenceEqual(new[] { "A", "B", "A", "New York", "C" }), "Append preserves order, duplicates and spaces");
+        Expect(store.Items.SequenceEqual(new[] { "New York", "C", "A", "B", "A" }), "Add to front preserves the order, duplicates and spaces within both batches");
         store.RemoveAt(2);
-        Expect(store.Items.SequenceEqual(new[] { "A", "B", "New York", "C" }), "Removing one duplicate preserves the other occurrence");
+        Expect(store.Items.SequenceEqual(new[] { "New York", "C", "B", "A" }), "Removing one duplicate preserves the other occurrence");
         store.RemoveAt(0); store.RemoveAt(store.Items.Length - 1);
-        Expect(store.Items.SequenceEqual(new[] { "B", "New York" }), "Remove first and last block");
+        Expect(store.Items.SequenceEqual(new[] { "C", "B" }), "Remove first and last block");
         var beforeInvalidRemoval = store.Items;
         try { store.RemoveAt(100); } catch (ArgumentOutOfRangeException) { }
         Expect(Object.ReferenceEquals(store.Items, beforeInvalidRemoval), "Invalid removal preserves saved set");
@@ -122,7 +122,7 @@ class Tests
         store.Move(2, 0);
         Expect(Object.ReferenceEquals(store.Items[0], duplicateTwo) && Object.ReferenceEquals(store.Items[1], duplicateOne), "Drag moves just the selected duplicate occurrence");
         store.Commit(new[] { "appended" }, true);
-        Expect(store.Items.Last() == "appended" && Object.ReferenceEquals(store.Items[0], duplicateTwo), "Appending preserves custom block order");
+        Expect(store.Items[0] == "appended" && Object.ReferenceEquals(store.Items[1], duplicateTwo) && Object.ReferenceEquals(store.Items[2], duplicateOne), "Adding at the front preserves custom block order behind the new batch");
         bool orderValid = true;
         store.Commit(Enumerable.Range(0, 30).Select(i => "item " + i).ToArray(), false);
         for (int run = 0; run < 200; run++) {
@@ -183,8 +183,8 @@ class Tests
         store.Merge(1, 0);
         Expect(store.Items.SequenceEqual(new[] { "B\r\nD\r\nC\r\nA" }), "Already merged blocks can be merged without losing internal line breaks");
         store.Commit(new[] { "new" }, true);
-        Expect(store.Items.Length == 2 && store.Items[0] == "B\r\nD\r\nC\r\nA", "Appending does not re-split a merged block");
-        store.RemoveAt(0);
+        Expect(store.Items.Length == 2 && store.Items[0] == "new" && store.Items[1] == "B\r\nD\r\nC\r\nA", "Adding at the front does not re-split a merged block");
+        store.RemoveAt(1);
         Expect(store.Items.SequenceEqual(new[] { "new" }), "Merged block can be removed as one item");
         store.Replace("duplicate\tkeep\tduplicate"); store.Merge(2, 0);
         Expect(store.Items.SequenceEqual(new[] { "duplicate\r\nduplicate", "keep" }), "Merge affects only the selected duplicate occurrences");
@@ -229,6 +229,15 @@ class Tests
             mergeContentsValid &= store.Items[0].Split(new[] { "\r\n" }, StringSplitOptions.None).OrderBy(x => x).SequenceEqual(original.OrderBy(x => x));
         }
         Expect(mergeContentsValid, "Repeated arbitrary merges retain every original item exactly once");
+        store.Replace("old first\told second");
+        store.Commit(BlockStore.Parse("new first\tnew second\r\nnew third"), true);
+        Expect(store.Items.SequenceEqual(new[] { "new first", "new second", "new third", "old first", "old second" }), "New capture is placed first while preserving natural tab/CRLF reading order");
+        store.Commit(BlockStore.Parse("latest first\nlatest second\tlatest third"), true);
+        Expect(store.Items.SequenceEqual(new[] { "latest first", "latest second", "latest third", "new first", "new second", "new third", "old first", "old second" }), "Repeated additions place newest batches first without reversing any batch");
+        store.Commit(BlockStore.Parse("  John Smith  \tNew York\n\nProject A\t   \tProject A"), true);
+        Expect(store.Items.Take(4).SequenceEqual(new[] { "  John Smith  ", "New York", "Project A", "Project A" }) && store.Items[4] == "latest first", "Front insertion preserves spaces, duplicate occurrences and non-empty paragraph order");
+        store.Commit(BlockStore.Parse("replace first\treplace second"), false);
+        Expect(store.Items.SequenceEqual(new[] { "replace first", "replace second" }), "Replace all still follows natural capture order");
         Console.WriteLine("PASS: " + checks + " checks");
     }
 }

@@ -24,21 +24,23 @@ namespace SuperCopy
             if (parts.Count == 0) throw new ArgumentException("No non-empty text was copied. Saved blocks are unchanged.");
             return parts.ToArray();
         }
-        internal void Commit(string[] incoming, bool append)
+        internal void Commit(string[] incoming, bool addToExisting)
         {
-            int oldCount = append ? Items.Length : 0;
+            int oldCount = addToExisting ? Items.Length : 0;
             if (incoming == null || incoming.Length == 0) throw new ArgumentException("No new blocks. Saved blocks are unchanged.");
             if ((long)oldCount + incoming.Length > MaxBlocks) throw new ArgumentException("The combined set exceeds 50,000 blocks. Use Replace all or capture less content.");
             long characters = 0;
-            if (append) foreach (string item in Items) characters += item.Length;
+            if (addToExisting) foreach (string item in Items) characters += item.Length;
             foreach (string item in incoming) {
                 if (String.IsNullOrWhiteSpace(item)) throw new ArgumentException("Invalid empty block. Saved blocks are unchanged.");
                 characters += item.Length;
             }
             if (characters > MaxCharacters) throw new ArgumentException("The combined set exceeds 2,000,000 characters. Use Replace all or capture less content.");
             var result = new string[oldCount + incoming.Length];
-            if (append) Array.Copy(Items, result, oldCount);
-            Array.Copy(incoming, 0, result, oldCount, incoming.Length);
+            // Put the newest capture first as a whole batch. Both batches retain
+            // their existing internal order; do not reverse individual text blocks.
+            Array.Copy(incoming, 0, result, 0, incoming.Length);
+            if (addToExisting) Array.Copy(Items, 0, result, incoming.Length, oldCount);
             Items = result;
         }
         // Insertion is a boundary in the original list: 0 is before the first

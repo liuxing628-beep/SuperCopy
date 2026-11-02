@@ -17,12 +17,12 @@ namespace SuperCopy
             ClientSize = new Size(570, 180);
             ShowInTaskbar = false; TopMost = true;
             Controls.Add(new Label { Left = 20, Top = 20, Width = 530, Height = 65,
-                Text = "Captured " + added + " new blocks. You currently have " + existing + " saved blocks.\nAppend the new blocks, or replace the entire saved set?" });
-            var append = new Button { Left = 20, Top = 108, Width = 170, Height = 40, Text = "Append to existing", DialogResult = DialogResult.Yes };
+                Text = "Captured " + added + " new blocks. You currently have " + existing + " saved blocks.\nAdd new blocks at the front, or replace the entire saved set?" });
+            var add = new Button { Left = 20, Top = 108, Width = 170, Height = 40, Text = "Add to front", DialogResult = DialogResult.Yes };
             var replace = new Button { Left = 202, Top = 108, Width = 170, Height = 40, Text = "Replace all", DialogResult = DialogResult.No };
             var cancel = new Button { Left = 384, Top = 108, Width = 166, Height = 40, Text = "Cancel", DialogResult = DialogResult.Cancel };
-            Controls.AddRange(new Control[] { append, replace, cancel });
-            AcceptButton = append; CancelButton = cancel;
+            Controls.AddRange(new Control[] { add, replace, cancel });
+            AcceptButton = add; CancelButton = cancel;
             Load += delegate {
                 // Fit after WinForms has applied font/DPI scaling. Re-evaluate the
                 // screen in case the monitor configuration changed during copying.

@@ -63,7 +63,7 @@ namespace SuperCopy
 
         internal MainForm()
         {
-            Text = "SuperCopy 1.7 · Clipboard Blocks";
+            Text = "SuperCopy 1.7.1 · Clipboard Blocks";
             Font = new Font("Segoe UI", 10f);
             AutoScaleMode = AutoScaleMode.Dpi;
             ClientSize = new Size(680, 520);
@@ -81,7 +81,7 @@ namespace SuperCopy
             learnButton = new Button { Left = 24, Top = 217, Width = 246, Height = 36, Text = "Or bind a mouse button", Enabled = false };
             binding = new Label { Left = 24, Top = 270, Width = 632, Height = 55, ForeColor = Color.FromArgb(29, 78, 216) };
             var note = new Label { Left = 24, Top = 329, Width = 632, Height = 65, ForeColor = Color.DimGray,
-                Text = "Use Ctrl or Alt with a key (Shift is optional). Shortcuts apply until you exit.\nCapture asks whether to append or replace. Tabs and line breaks split blocks.\nClick: paste · Drag edges: reorder · Hold on a block: merge · Right-click: remove." };
+                Text = "Use Ctrl or Alt with a key (Shift is optional). Shortcuts apply until you exit.\nCapture: add to front or replace all. Split on tabs / line breaks.\nClick: paste · Drag edges: reorder · Hold on a block: merge · Right-click: remove." };
             var hide = new Button { Left = 24, Top = 406, Width = 200, Height = 36, Text = "Run in background" };
             var quit = new Button { Left = 242, Top = 406, Width = 200, Height = 36, Text = "Exit SuperCopy" };
             status = new Label { Left = 24, Top = 455, Width = 632, Height = 54, Text = "Step 1: click the capture field and press your preferred shortcut." };
@@ -346,7 +346,7 @@ namespace SuperCopy
                         if (result == DialogResult.Yes || result == DialogResult.No) {
                             store.Commit(incoming, result == DialogResult.Yes);
                             UpdateTray();
-                            Notify((result == DialogResult.Yes ? "Appended " : "Replaced with ") + incoming.Length +
+                            Notify((result == DialogResult.Yes ? "Added to front: " : "Replaced with ") + incoming.Length +
                                 " blocks. Saved total: " + store.Items.Length + ". Open with " + PanelName() + ".");
                         } else status.Text = "Capture canceled. Saved blocks are unchanged.";
                     }

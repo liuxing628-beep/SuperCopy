@@ -128,6 +128,10 @@ struct DragSession {
     private(set) var dragging = false
     private(set) var candidate: Int?
     private var entered: TimeInterval = 0
+    init(source: Int, start: CGPoint) {
+        self.source = source
+        self.start = start
+    }
     mutating func update(point: CGPoint, candidate next: Int?, now: TimeInterval) {
         if !dragging && (abs(point.x - start.x) >= 4 || abs(point.y - start.y) >= 4) { dragging = true }
         let next = dragging && next != source ? next : nil

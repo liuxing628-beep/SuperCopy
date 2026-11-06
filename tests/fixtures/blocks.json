@@ -1,0 +1,38 @@
+[
+  {
+    "name": "natural reading order and whitespace",
+    "initial": "  John Smith  \tNew York Office\r\n\t\n上海　项目\u2028Café A\u0085🙂\u2029End",
+    "incoming": "new first\tnew second\r\nnew third",
+    "addToFront": true,
+    "expected": ["new first", "new second", "new third", "  John Smith  ", "New York Office", "上海　项目", "Café A", "🙂", "End"]
+  },
+  {
+    "name": "duplicate occurrences, merge at target, add without splitting",
+    "initial": "repeat\tB\trepeat\tC",
+    "operations": [
+      {"type": "move", "source": 3, "target": 0},
+      {"type": "merge", "source": 1, "target": 2},
+      {"type": "remove", "source": 2}
+    ],
+    "incoming": "new\tnew",
+    "addToFront": true,
+    "expected": ["new", "new", "C", "B\r\nrepeat"]
+  },
+  {
+    "name": "replace retains only the new capture",
+    "initial": "A\r\nB\tC",
+    "incoming": "first line\n   \tsecond line",
+    "addToFront": false,
+    "expected": ["first line", "second line"]
+  },
+  {
+    "name": "forward move then repeated merge preserves all internal line breaks",
+    "initial": "A\tB\tC\tD",
+    "operations": [
+      {"type": "move", "source": 0, "target": 3},
+      {"type": "merge", "source": 0, "target": 2},
+      {"type": "merge", "source": 2, "target": 1}
+    ],
+    "expected": ["C", "A\r\nB\r\nD"]
+  }
+]

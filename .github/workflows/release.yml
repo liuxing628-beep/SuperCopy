@@ -1,0 +1,77 @@
+name: Release Windows and macOS
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v[0-9]*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supercopy-release
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-dotnet@v6.1.0
+        with:
+          dotnet-version: '8.0.x'
+      - run: python scripts/package-release.py validate
+      - run: dotnet run --project tests/Tests.csproj -c Release
+      - run: dotnet build SuperCopy.csproj -c Release -o dist --nologo
+      - run: python scripts/package-release.py windows
+      - uses: actions/upload-artifact@v7.0.2
+        with:
+          name: windows
+          path: dist/SuperCopy-Windows-*.zip
+          if-no-files-found: error
+
+  macos:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - run: python3 scripts/package-release.py validate
+      - run: scripts/build-macos.sh
+      - run: scripts/test-macos.sh --ui
+      - run: python3 scripts/package-release.py macos
+      - uses: actions/upload-artifact@v7.0.2
+        with:
+          name: macos
+          path: dist/SuperCopy-macOS-*.zip
+          if-no-files-found: error
+
+  macos-intel:
+    needs: macos
+    runs-on: macos-15-intel
+    steps:
+      - uses: actions/download-artifact@v8.0.2
+        with:
+          name: macos
+      - run: |
+          ditto -x -k SuperCopy-macOS-*.zip unpacked
+          codesign --verify --strict unpacked/SuperCopy.app
+          unpacked/SuperCopy.app/Contents/MacOS/SuperCopy --ui-smoke-test
+
+  publish:
+    if: github.ref == 'refs/heads/main' || github.ref_type == 'tag'
+    needs: [windows, macos, macos-intel]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v8.0.2
+        with:
+          path: dist
+          merge-multiple: true
+      - run: python3 scripts/package-release.py source
+      - run: scripts/publish-release.sh dist
+        env:
+          GH_TOKEN: ${{ github.token }}

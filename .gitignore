@@ -6,3 +6,5 @@ tests/obj/
 .DS_Store
 dist/
 *.zip
+macos/.build/
+__pycache__/

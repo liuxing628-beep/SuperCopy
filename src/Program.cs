@@ -63,7 +63,7 @@ namespace SuperCopy
 
         internal MainForm()
         {
-            Text = "SuperCopy 1.7.1 · Clipboard Blocks";
+            Text = "SuperCopy " + typeof(MainForm).Assembly.GetName().Version.ToString(3) + " · Clipboard Blocks";
             Font = new Font("Segoe UI", 10f);
             AutoScaleMode = AutoScaleMode.Dpi;
             ClientSize = new Size(680, 520);

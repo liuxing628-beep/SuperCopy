@@ -1,10 +1,10 @@
-# SuperCopy 1.7.1 — Clipboard Blocks
+# SuperCopy — Clipboard Blocks
 
-[Download the latest Windows ZIP](https://github.com/liuxing628-beep/SuperCopy/releases/latest) · [Source code](https://github.com/liuxing628-beep/SuperCopy)
+[Download Windows or macOS](https://github.com/liuxing628-beep/SuperCopy/releases/latest) · [Source code](https://github.com/liuxing628-beep/SuperCopy)
 
-Capture an Excel row or selected text, split it into reusable blocks, and click a block to paste it at your text cursor. SuperCopy runs in the Windows system tray and opens an adaptive panel beside your mouse pointer.
+Capture an Excel row or selected text, split it into reusable blocks, and click a block to paste it at your text cursor. SuperCopy runs in the Windows system tray or macOS menu bar and opens an adaptive panel beside your mouse pointer.
 
-## Quick start
+## Quick start (Windows)
 
 1. Download the Windows ZIP from [Releases](https://github.com/liuxing628-beep/SuperCopy/releases/latest), extract it, and run **SuperCopy.exe**. Windows 10/11 with **.NET Framework 4.8** is required. No app installation is needed.
 2. **Step 1 — Super Copy shortcut:** click the capture field, press your preferred combination, then click **Use capture shortcut**. Use Ctrl or Alt with a letter, number, function key, or punctuation key; Shift is optional. For example, Ctrl+Shift+C is a choice, not a fixed binding.
@@ -18,6 +18,17 @@ Capture an Excel row or selected text, split it into reusable blocks, and click 
 There are no automatically registered capture or panel shortcuts. Ctrl+C and Ctrl+V are reserved for native copy/paste, and the capture and panel shortcuts must differ. The app reports unavailable combinations so you can choose another. Shortcuts and mouse bindings apply only until exit.
 
 To update from an earlier release, exit the old copy from the system tray, extract the new package, and start the new executable. Bind your mouse button again.
+
+## Quick start (macOS)
+
+1. Download the **macOS ZIP** from [Releases](https://github.com/liuxing628-beep/SuperCopy/releases/latest), extract **SuperCopy.app**, and move it to Applications if desired. It supports Apple silicon and Intel Macs with macOS 13 or later. The download is ad hoc signed; if macOS blocks a trusted copy on first launch, use the per-app **Open Anyway** option described in [Apple's guide](https://support.apple.com/en-us/102445).
+2. In SuperCopy Settings, click **Grant Accessibility…**, enable SuperCopy in **System Settings → Privacy & Security → Accessibility**, then click **Check permissions**. SuperCopy uses this access to send ⌘C and ⌘V to the app you select. If macOS separately asks for Input Monitoring for a mouse binding or permission to read the clipboard after a capture, grant that access if you want the corresponding feature. Keyboard shortcuts do not require a keyboard event tap.
+3. Record the capture shortcut first (for example, **⌃⇧C**). Record a different panel shortcut (for example, **⌃⇧V**) or bind a middle, right, or side mouse button. Click **Run in background**.
+4. Select text or Excel cells, press and release your capture shortcut, and choose **Add to front**, **Replace all**, or **Cancel**. The choice opens beside the pointer on the source screen when the source window is available to macOS Accessibility.
+5. Place the text cursor in the destination app, open the block panel, and left-click a block to paste. Right-click removes it. Drag to an edge or gap to reorder; hold over the middle of another block until it turns green to merge. Drag near the top/bottom of a long panel to scroll.
+6. The clipboard icon in the menu bar opens Settings or lets you quit. **View saved blocks** from the menu is copy-only. As on Windows, blocks and bindings are held in memory until exit.
+
+On updates, quit the old copy before replacing it. If macOS no longer recognizes its permissions after replacement, remove the old Accessibility entry and enable the updated app. The app makes no network requests and only reads the clipboard in response to a capture.
 
 ## Adaptive block panel
 
@@ -65,7 +76,7 @@ Before pasting, SuperCopy waits for mouse buttons and modifier keys to be releas
 
 ## Language and privacy
 
-All application labels, notifications, status messages, and instructions are in English. The interface uses Segoe UI, with Windows font fallback for captured multilingual text. Your captured content is never translated.
+All application labels, notifications, status messages, and instructions are in English. The interface uses the platform fonts and font fallback for captured multilingual text. Your captured content is never translated.
 
 Blocks and the mouse binding are kept only in process memory. SuperCopy does not write clipboard history files or make network requests. Exiting clears its saved blocks and binding; the last copied content remains in the Windows clipboard.
 
@@ -89,9 +100,27 @@ dotnet run --project tests/Tests.csproj -c Release
 
 The SDK build downloads Microsoft's .NET Framework reference assemblies from NuGet. The test project requires the .NET 8 SDK. App source is restricted to C# 5 for compatibility with the Framework compiler. Multilingual strings in test fixtures verify Unicode preservation; they are not application UI text.
 
+## Build on macOS
+
+Install Apple's Command Line Tools or Xcode, then run:
+
+```sh
+scripts/build-macos.sh
+scripts/test-macos.sh --ui
+python3 scripts/package-release.py macos
+```
+
+The build creates `dist/SuperCopy-macOS-vX.Y.Z-English.zip` containing a universal, ad hoc signed app. The smoke test opens AppKit windows and tests their click and drag handlers without accessing the system clipboard or sending input to other apps. Copy/paste and mouse shortcuts in an external app need a manual test with Accessibility enabled.
+
+## Release both versions
+
+[Release Windows and macOS](https://github.com/liuxing628-beep/SuperCopy/actions/workflows/release.yml) builds and tests Windows and macOS from the same commit. The Intel runner also unpacks and runs the Mac app. Publication waits for all jobs and both platform archives, and uploads them together with the source archive and SHA-256 checksums.
+
+For a new release, update `VERSION` and both version attributes in `src/AssemblyInfo.cs`, commit the changes to main, then run the release workflow. Alternatively, push the matching `vX.Y.Z` tag. An optional `docs/releases/vX.Y.Z.md` supplies the release notes. The publisher assembles the assets on a draft and makes it public only after the uploads verify.
+
 ## Validation
 
-The app is cross-compiled on macOS to a Windows PE executable. Automated checks cover text splitting, space preservation, Unicode, duplicate order, capture limits, preserving old blocks on failure, Win32 input structure layout, adaptive wrapping, narrow screens, hit testing, non-overlapping layouts, 50,000-block sets, append/replace/cancel data behavior, exact removal of duplicates, combined append limits, shortcut validation, drag/click separation, insertion targets, canceled drags, exact movement of duplicate occurrences, and reorder invariants.
+The Windows app can be cross-compiled on macOS to a Windows PE executable. Both test suites run the same block behavior fixtures for natural order, duplicates, merge, and front insertion. Automated checks cover text splitting, space preservation, Unicode, duplicate order, capture limits, preserving old blocks on failure, Win32 input structure layout, adaptive wrapping, narrow screens, hit testing, non-overlapping layouts, 50,000-block sets, append/replace/cancel data behavior, exact removal of duplicates, combined append limits, shortcut validation, drag/click separation, insertion targets, canceled drags, exact movement of duplicate occurrences, and reorder invariants.
 
 Previous releases were reported to work well by the user. This upgraded release has not been visually tested on Windows in the build environment. When trying a new setup, check mouse binding, Excel selection and in-cell editing, automatic pasting, scrolling and click targets, display scaling, and exiting/restoring normal mouse behavior.
 

@@ -1,6 +1,8 @@
 using System;
 using System.Linq;
 using System.Drawing;
+using System.IO;
+using System.Text.Json;
 using System.Runtime.InteropServices;
 using SuperCopy;
 
@@ -10,6 +12,7 @@ class Tests
     static void Expect(bool value, string name) { if (!value) throw new Exception(name); checks++; }
     static void Main()
     {
+        CheckSharedFixtures();
         var store = new BlockStore();
         store.Replace("名称\t数量\t价格\r\n摄像头\t12\t99.50\r\n");
         Expect(store.Items.SequenceEqual(new[] { "名称", "数量", "价格", "摄像头", "12", "99.50" }), "Excel TSV/CRLF");
@@ -240,4 +243,32 @@ class Tests
         Expect(store.Items.SequenceEqual(new[] { "replace first", "replace second" }), "Replace all still follows natural capture order");
         Console.WriteLine("PASS: " + checks + " checks");
     }
+    static void CheckSharedFixtures()
+    {
+        using var json = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "fixtures", "blocks.json")));
+        foreach (var fixture in json.RootElement.EnumerateArray())
+        {
+            var store = new BlockStore();
+            store.Replace(fixture.GetProperty("initial").GetString());
+            if (fixture.TryGetProperty("operations", out var operations))
+            {
+                foreach (var step in operations.EnumerateArray())
+                {
+                    int source = step.GetProperty("source").GetInt32();
+                    switch (step.GetProperty("type").GetString())
+                    {
+                        case "move": store.Move(source, step.GetProperty("target").GetInt32()); break;
+                        case "remove": store.RemoveAt(source); break;
+                        case "merge": store.Merge(source, step.GetProperty("target").GetInt32()); break;
+                        default: throw new InvalidOperationException("Unknown shared test operation");
+                    }
+                }
+            }
+            if (fixture.TryGetProperty("incoming", out var incoming))
+                store.Commit(BlockStore.Parse(incoming.GetString()), fixture.GetProperty("addToFront").GetBoolean());
+            Expect(store.Items.SequenceEqual(fixture.GetProperty("expected").EnumerateArray().Select(item => item.GetString())),
+                "Shared Windows/macOS fixture: " + fixture.GetProperty("name").GetString());
+        }
+    }
+
 }
